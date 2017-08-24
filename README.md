@@ -35,11 +35,11 @@ labelsA= ['A','B','C','D']
 labelsB= ['B','A','C','D']
 data = [1,.1,0,0],[.1,1,.5,0],[0,.5,1,0],[0,0,0,1]]
 
-mat = pd.DataFrame([ data = data,
+mat = pd.DataFrame(  data = data,
                      columns=labelsA,
                      index=labelsA)
 
-mat = pd.DataFrame([ data = data,
+mat = pd.DataFrame(  data = data,
                      columns=labelsB,
                      index=labelsB)
 
