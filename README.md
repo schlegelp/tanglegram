@@ -47,5 +47,7 @@ mat = pd.DataFrame([ data = data,
 fig = tplot(mat,mat2)
 ```
 
+<img src="https://user-images.githubusercontent.com/7161148/29683302-c2cc22e0-8905-11e7-9091-97e55bce1ddb.png" width="650">
+
 ## License:
 This code is under GNU GPL V3
