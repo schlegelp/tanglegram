@@ -33,7 +33,11 @@ import tanglegram.plot as tplot
 # Generate two distance matrices and just switch labels in one
 labelsA= ['A','B','C','D']
 labelsB= ['B','A','C','D']
-data = [1,.1,0,0],[.1,1,.5,0],[0,.5,1,0],[0,0,0,1]]
+data = [ [ 1, .1,  0, 0],
+         [.1,  1, .5, 0],
+         [ 0, .5,  1, 0],
+         [ 0,  0,  0, 1]
+        ]
 
 mat = pd.DataFrame(  data = data,
                      columns=labelsA,
