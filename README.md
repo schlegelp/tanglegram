@@ -14,7 +14,7 @@ This command should also work to update the package.
 
 If your default distribution is Python 2, you have to explicitly tell [PIP](https://pip.pypa.io/en/stable/installing/) to install for Python 3:
 
-`pip3 install git+git://github.com/schlegelp/pymaid@master`  
+`pip3 install git+git://github.com/schlegelp/tanglegram@master`  
 
 #### External libraries used:
 Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install all external dependencies. You may run into problems on Windows though. In that case, you need to install dependencies manually, here is a list of dependencies (check out `install_requires` in [setup.py](https://raw.githubusercontent.com/schlegelp/PyMaid/master/setup.py) for version info):
