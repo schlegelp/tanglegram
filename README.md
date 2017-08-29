@@ -1,6 +1,6 @@
 tanglegram
 ==========
-Uses scipy and matplotlib to plot simple tanglegrams.
+Uses scipy and matplotlib to plot simple tanglegrams. Inspired by the amazing [dendextend](https://github.com/talgalili/dendextend) by Tal Galili.
 
 ## Installation
 I recommend using [Python Packaging Index (PIP)](https://pypi.python.org/pypi) to install the package.
@@ -23,35 +23,42 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 - [SciPy](http://www.scipy.org)
 - [Numpy](http://www.scipy.org) 
 - [Matplotlib](http://www.matplotlib.org)
+- [Tqdm](https://pypi.python.org/pypi/tqdm)
 
 ## Quickstart:
 
 ```python
-import pandas as pd
-import tanglegram.plot as tplot
+from tanglegram import tangle
+import numpy as np
+import matplotlib.pyplot as plt
 
+# Quick test: 
 # Generate two distance matrices and just switch labels in one
 labelsA= ['A','B','C','D']
 labelsB= ['B','A','C','D']
-data = [ [ 1, .1,  0, 0],
-         [.1,  1, .5, 0],
-         [ 0, .5,  1, 0],
-         [ 0,  0,  0, 1]
-        ]
+data = np.array( [ [ 1, .1,  0, 0],
+                 [.1,  1, .5, 0],
+                 [ 0, .5,  1, 0],
+                 [ 0,  0,  0, 1]
+                ])
 
-mat = pd.DataFrame(  data = data,
+mat1 = pd.DataFrame( data,
                      columns=labelsA,
                      index=labelsA)
 
-mat = pd.DataFrame(  data = data,
+mat2 = pd.DataFrame( data,
                      columns=labelsB,
                      index=labelsB)
 
 # Plot tanglegram
-fig = tplot(mat,mat2)
+fig = tangle.plot(mat1,mat2)
+plt.show()
 ```
 
 <img src="https://user-images.githubusercontent.com/7161148/29683302-c2cc22e0-8905-11e7-9091-97e55bce1ddb.png" width="650">
+
+## Known Issues:
+* layout does not scale well, i.e. small dendrograms look weird
 
 ## License:
 This code is under GNU GPL V3

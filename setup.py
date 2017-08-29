@@ -43,7 +43,8 @@ setup(
     install_requires=[        
         "scipy>=0.18.1",        
         "numpy>=1.12.1",
-        "matplotlib>=2.0.0",        
+        "matplotlib>=2.0.0",     
+        "tqdm"   
     ],
 
     python_requires='>=3',
