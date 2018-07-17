@@ -35,7 +35,7 @@ try:
 except:
     pass
 
-__all__ = ['plot', 'get_entanglement']
+__all__ = ['gen_tangle', 'get_entanglement']
 
 # Set up logging
 module_logger = logging.getLogger(__name__)
@@ -51,7 +51,8 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def plot(a, b, labelsA=None, labelsB=None, optimize_method='random', p=10000, color_by_diff=True, **kwargs):
+def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
+               color_by_diff=True, link_kwargs={}, dend_kwargs={}):
     """ Plots a tanglegram from two dendrograms.
 
     Parameters
