@@ -15,6 +15,9 @@
 #    You should have received a copy of the GNU General Public License
 #    along
 
+# TODO:
+# - make optimize function use diminishing-returns function instead of fixed runs
+
 import matplotlib.pyplot as plt
 import scipy.cluster as sclust
 import scipy.spatial.distance as sdist
@@ -46,7 +49,7 @@ if not module_logger.handlers:
     sh.setLevel(logging.INFO)
     # Create formatter and add it to the handlers
     formatter = logging.Formatter(
-        '%(levelname)-5s : %(message)s (%(name)s)')
+                '%(levelname)-5s : %(message)s (%(name)s)')
     sh.setFormatter(formatter)
     module_logger.addHandler(sh)
 
@@ -57,23 +60,22 @@ def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
 
     Parameters
     ----------
-    (a,b) :                 {pandas.DataFrame, scipy.cluster.hierarchy.linkage}
-                            Dendrograms to be compared. 
+    (a,b) :                 pandas.DataFrame | scipy.cluster.hierarchy.linkage
+                            Dendrograms to be compared. If DataFrame, will be
+                            considered a distance matrix and linkage is
+                            generated (see ``link_kwargs``).
     (labelsA,labelsB) :     list of str
-                            If not provided and a/b pandas Dataframe, will try 
-                            to extract from columns.
-    optimize_method :       {'random','greedy',None}, optional
-                            Sets method to use for aligning left and right dendrogram
-                            'random' uses brute force approach -> might give varying 
-                            results on each iteration.
-    p :                     int, optional
-                            Paramter to be passed to optimize_method. For 'random',
-                            this determines the number of iterations.
-    color_by_diff :         bool, optional
-                            If True, straight edges will have lighter color, 
-                            emphasizing differences between dendrograms.
-    **kwargs
-                            _kwargs_ to be passed on to scipy.cluster.hierarchy.linkage
+                            If not provided and a/b are pandas Dataframes,
+                            will try to extract from columns.
+    optimize_order :        bool | int, optional
+                            If not False, will try rearranging dendrogram to
+                            optimise pairing of similar values. Currently uses
+                            brute force approach -> might give varying results
+                            on each iteration.
+    link_kwargs :           dict, optional
+                            Keyword arguments to be passed on to ``scipy.cluster.hierarchy.linkage``
+    dend_kwargs :           dict, optional
+                            Keyword arguments to be passed on to ``scipy.cluster.hierarchy.dendrogram``
 
     Returns
     -------
@@ -102,58 +104,70 @@ def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
     else:
         raise TypeError('Parameter <b> needs to be either pandas DataFrame or numpy array')
 
-    if optimize_method == 'random':
-        linkage1, linkage2 = _random_optimize_leaf_order(
-            linkage1, linkage2, labelsA, labelsB, max_iter=p)
-    else:
-        module_logger.warning('Unknown optmizing method.')
+    if optimize_order:
+        linkage1, linkage2 = _optimize_leaf_order(linkage1, linkage2,
+                                                  labelsA, labelsB,
+                                                  max_iter = optimize_order)
 
     fig = pylab.figure(figsize=(8, 8))
 
     # Compute and plot left dendrogram.
     ax1 = fig.add_axes([0.05, 0.1, 0.25, 0.8])
     Z1 = sclust.hierarchy.dendrogram(
-        linkage1, orientation='left', labels=labelsA)
-    # ax1.set_xticks([])
-    # ax1.set_yticks([])
+        linkage1, orientation='left', labels=labelsA, **dend_kwargs)
+    #ax1.set_xticks([])
+    #ax1.set_yticks([])
 
     # Compute and plot right dendrogram.
-    ax2 = fig.add_axes([0.7, 0.1, 0.25, 0.8])  # [0.3, 0.71, 0.6, 0.2])
+    ax2 = fig.add_axes([0.7, 0.1, 0.25, 0.8])#[0.3, 0.71, 0.6, 0.2])
     Z2 = sclust.hierarchy.dendrogram(
-        linkage2, labels=labelsB, orientation='right')
-    # ax2.set_xticks([])
-    # ax2.set_yticks([])
+        linkage2, labels=labelsB, orientation='right', **dend_kwargs)
+    #ax2.set_xticks([])
+    #ax2.set_yticks([])
 
     if True in [l not in Z2['ivl'] for l in Z1['ivl']]:
-        plt.clf()
-        raise ValueError('Mismatch of dendrogram labels - unable to compare')
+        #plt.clf()
+        #raise ValueError('Mismatch of dendrogram labels - unable to compare')
+        module_logger.warning('Labels {0} do not exist in both dendrograms'.format(set([l for l in Z1['ivl'] if l not in Z2['ivl']] + [l for l in Z2['ivl'] if l not in Z1['ivl']])))
 
     # Generate middle plot with connecting lines
     ax3 = fig.add_axes([0.4, 0.1, 0.2, 0.8])
     ax3.axis('off')
-    ax3.set_ylim((ax1.viewLim.y0, ax1.viewLim.y1))
-    ax3.set_xlim((0, 1))
+    ax3.set_xlim((0,1))
+
+    # Get min and max y dimensions
+    max_y = max(ax1.viewLim.y1, ax2.viewLim.y1)
+    min_y = min(ax1.viewLim.y0, ax2.viewLim.y0)
+
+    # Make sure labels of both dendrograms have the same font size
+    ax1.set_yticklabels(ax1.get_yticklabels(), fontsize=8)
+    ax2.set_yticklabels(ax2.get_yticklabels(), fontsize=8)
+
+    ax1.set_xticklabels(ax1.get_xticklabels(), fontsize=8)
+    ax2.set_xticklabels(ax2.get_xticklabels(), fontsize=8)
+
+    # Make sure all y axes have same resolution
+    for _ in [ax3]: #[ax1,ax2,ax3]:
+        _.set_ylim((min_y, max_y))
 
     # Now iterate over all left leaves
-    for ix_l, l in enumerate(Z1['ivl']):
-        coords_l = (ax1.viewLim.y1 - ax1.viewLim.y0) / \
-            (len(Z1['leaves'])) * (ix_l + .5)
-
-        try:
-            ix_r = Z2['ivl'].index(l)
-        except:
+    for ix_l,l in enumerate(Z1['ivl']):
+        # Skip if no corresponding element
+        if l not in Z2['ivl']:
             continue
 
-        coords_r = (ax2.viewLim.y1 - ax2.viewLim.y0) / \
-            (len(Z2['leaves'])) * (ix_r + .5)
+        ix_r = Z2['ivl'].index(l)
+
+        coords_l = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z1['leaves'])) * (ix_l+.5)
+        coords_r = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z2['leaves'])) * (ix_r+.5)
 
         if not color_by_diff:
             c = 'black'
         else:
-            v = max(round(.75 - math.fabs(ix_l - ix_r) / len(Z1['ivl']), 2), 0)
+            v = max(round(.75 - math.fabs(ix_l - ix_r) / len( Z1['ivl'] ), 2), 0)
             c = (v, v, v)
 
-        ax3.plot([0, 1], [coords_l, coords_r], '-', linewidth=1.5, c=c)
+        ax3.plot([0, 1], [coords_l,coords_r], '-', linewidth=1, c=c)
 
     module_logger.info('Done. Use matplotlib.pyplot.show() to show plot.')
 
