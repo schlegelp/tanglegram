@@ -210,8 +210,17 @@ def _random_optimize_leaf_order(link1, link2, labels1, labels2, max_iter=10000):
 
 
 def get_entanglement(dend1, dend2):
-    """ Returns average displacement of leafs in dendogram 1 and 2 """
-    return sum([math.fabs(ix - dend2['ivl'].index(l)) for ix, l in enumerate(dend1['ivl'])]) / len(dend1['ivl'])
+    """ Returns average displacement of leafs in dendogram 1 and 2. Skips
+    leafs that aren't present in both dendrograms.
+    """
+    exist_in_both = [l for l in dend1['ivl'] if l in dend2['ivl']]
+
+    if not exist_in_both:
+        raise ValueError('No matching labels in dendrograms.')
+
+    return sum([math.fabs(dend1['ivl'].index(l) - dend2['ivl'].index(l)) for l in exist_in_both]) / len(exist_in_both)
+
+
 if __name__ == '__main__':
     labelsA= ['A', 'B', 'C', 'D']
     labelsB= ['B', 'A', 'C', 'D']
