@@ -15,6 +15,6 @@
 #    You should have received a copy of the GNU General Public License
 #    along
 
-__version__ = "0.0.2"
+__version__ = "0.1.0"
 
 from tanglegram.tangle import *
