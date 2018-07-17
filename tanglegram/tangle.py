@@ -25,7 +25,15 @@ import math
 import logging
 import random
 
-from tqdm import tqdm
+from tqdm import tqdm, trange
+try:
+    ipy_str = str(type(get_ipython()))
+    if 'zmqshell' in ipy_str:
+        from tqdm import tqdm_notebook, tnrange
+        tqdm = tqdm_notebook
+        trange = tnrange
+except:
+    pass
 
 __all__ = ['plot', 'get_entanglement']
 
@@ -150,63 +158,71 @@ def plot(a, b, labelsA=None, labelsB=None, optimize_method='random', p=10000, co
 
     return fig
 
-def _random_optimize_leaf_order(link1, link2, labels1, labels2, max_iter=10000):
-    """ Tries to align two linkages by randomly flipping nodes. Currently
-    a brute force approach.
+
+def _optimize_leaf_order(link1, link2, labels1, labels2, max_iter):
+    """ Optimizes leaf order of linkage 1 and 2 to best match each other.
 
     Parameters
     ----------
     (link1,link2) :     scipy.cluster.hierarchy.linkage
-                        Linkages to align
+                        linkages to be matched
     (labels1,labels2) : list of str
-                        Labels in order of the original observation matrix
-    max_iter :          int, optional
-                        Number of random iterations to test for better alignment.
-                        Searching for improved leaf order will stop regardless
-                        of max_iter if entangle = 0 is found.
+
 
     Returns
     -------
-    link1, link2 :      scipy.cluster.hierarchy.linkage
-                        Optimized linkage matrices
-
+    optimized linkage
     """
-    dend1 = sclust.hierarchy.dendrogram(
-        link1, orientation='left', no_plot=True, labels=labels1)
-    dend2 = sclust.hierarchy.dendrogram(
-        link2, orientation='right', no_plot=True, labels=labels2)
 
-    entangle = get_entanglement(dend1, dend2)
+    dend1 = sclust.hierarchy.dendrogram(link1, orientation = 'left',
+                                        no_plot=True, labels=labels1)
+    dend2 = sclust.hierarchy.dendrogram(link2, orientation = 'right',
+                                        no_plot=True, labels=labels2)
 
-    for i in tqdm(range(max_iter), desc='Optimizing'):
+    entangles =[get_entanglement(dend1, dend2)]
+
+    pbar = trange(max_iter)
+
+    for i in pbar:
         temp_link1 = link1.copy()
         temp_link2 = link2.copy()
 
+        # Go over all "hinges" of the dendrogram
         for k in range(len(link2)):
+            # In 50% of the cases turn the hinge
             if random.randint(0, 100) > 50:
-                temp_link2[k] = [temp_link2[k][1], temp_link2[
-                    k][0], temp_link2[k][2], temp_link2[k][3]]
+                temp_link2[k] = [temp_link2[k][1], temp_link2[k][0], temp_link2[k][2], temp_link2[k][3]]
 
+        # Do the same for other dendrogram
         for k in range(len(link1)):
-            if random.randint(0, 100) > 50:
-                temp_link1[k] = [temp_link1[k][1], temp_link1[
-                    k][0], temp_link1[k][2], temp_link1[k][3]]
+            if random.randint(0,100) > 50:
+                temp_link1[k] = [temp_link1[k][1], temp_link1[k][0], temp_link1[k][2], temp_link1[k][3]]
 
-        dend1 = sclust.hierarchy.dendrogram(
-            temp_link1, orientation='left', no_plot=True, labels=labels1)
-        dend2 = sclust.hierarchy.dendrogram(
-            temp_link2, orientation='right', no_plot=True, labels=labels2)
+        # Generate actual dendrogram to get leaf order
+        dend1 = sclust.hierarchy.dendrogram(temp_link1, orientation = 'left',
+                                            no_plot=True, labels=labels1)
+        dend2 = sclust.hierarchy.dendrogram(temp_link2, orientation = 'right',
+                                            no_plot=True, labels=labels2)
+
+        # Test new entanglement -> keep if better then previous
         new_entangle = get_entanglement(dend1, dend2)
-
-        if entangle > new_entangle:
-            entangle = new_entangle
+        if entangles[-1] >= new_entangle:
+            entangles.append(new_entangle)
             link1 = temp_link1
             link2 = temp_link2
+        else:
+            entangles.append( entangles[-1] )
 
-            if entangle == 0:
-                break
+        if i > 0 and i % 100 == 0:
+            slope = round(entangles[-1] - np.mean(entangles[-100:-1]), 2)
+            pbar.set_description('Optimising {0}'.format(slope))
 
-    return link1, link2
+    pbar.close()
+
+    module_logger.info('Finished optimising at entanglement {0}'.format(round(entangles[-1], 4)))
+
+
+    return link1,link2
 
 
 def get_entanglement(dend1, dend2):
