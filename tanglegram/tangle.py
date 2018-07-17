@@ -212,3 +212,23 @@ def _random_optimize_leaf_order(link1, link2, labels1, labels2, max_iter=10000):
 def get_entanglement(dend1, dend2):
     """ Returns average displacement of leafs in dendogram 1 and 2 """
     return sum([math.fabs(ix - dend2['ivl'].index(l)) for ix, l in enumerate(dend1['ivl'])]) / len(dend1['ivl'])
+if __name__ == '__main__':
+    labelsA= ['A', 'B', 'C', 'D']
+    labelsB= ['B', 'A', 'C', 'D']
+    data = [[ 0,  .1,  .4, .3],
+            [.1,   0,  .5, .6],
+            [ .4, .5,   0, .2],
+            [ .3, .6,  .2,  0]]
+
+    mat1 = pd.DataFrame(data,
+                        columns=labelsA,
+                        index=labelsA)
+
+    mat2 = pd.DataFrame(data,
+                        columns=labelsB,
+                        index=labelsB)
+
+    # Plot tanglegram
+    fig = gen_tangle(mat1, mat2, optimize_order=False)
+    plt.show()
+
