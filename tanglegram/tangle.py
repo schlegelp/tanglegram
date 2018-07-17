@@ -17,6 +17,7 @@
 
 import matplotlib.pyplot as plt
 import scipy.cluster as sclust
+import scipy.spatial.distance as sdist
 import numpy as np
 import pandas as pd
 import pylab
@@ -73,24 +74,24 @@ def plot(a, b, labelsA=None, labelsB=None, optimize_method='random', p=10000, co
     plt.style.use('ggplot')
 
     if isinstance(a, pd.DataFrame):
-        linkage1 = sclust.hierarchy.linkage(a, **kwargs)
+        module_logger.info('Generating linkage from dataframe')
+        linkage1 = sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs)
         if not labelsA:
             labelsA = a.columns.tolist()
     elif isinstance(a, np.ndarray):
         linkage1 = a
     else:
-        raise TypeError(
-            'Parameter <a> needs to be either pandas DataFrame or numpy array')
+        raise TypeError('Parameter <a> needs to be either pandas DataFrame or numpy array')
 
     if isinstance(b, pd.DataFrame):
-        linkage2 = sclust.hierarchy.linkage(b, **kwargs)
+        module_logger.info('Generating linkage from dataframe')
+        linkage2 = sclust.hierarchy.linkage(sdist.squareform(b, checks=False), **link_kwargs)
         if not labelsB:
             labelsB = b.columns.tolist()
     elif isinstance(b, np.ndarray):
         linkage2 = b
     else:
-        raise TypeError(
-            'Parameter <b> needs to be either pandas DataFrame or numpy array')
+        raise TypeError('Parameter <b> needs to be either pandas DataFrame or numpy array')
 
     if optimize_method == 'random':
         linkage1, linkage2 = _random_optimize_leaf_order(
