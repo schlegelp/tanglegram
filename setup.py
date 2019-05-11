@@ -1,9 +1,9 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 import re
 
 
-VERSIONFILE="tanglegram/__init__.py"
+VERSIONFILE = "tanglegram/__init__.py"
 verstrline = open(VERSIONFILE, "rt").read()
 VSRE = r"^__version__ = ['\"]([^'\"]*)['\"]"
 mo = re.search(VSRE, verstrline, re.M)
@@ -12,17 +12,20 @@ if mo:
 else:
     raise RuntimeError("Unable to find version string in %s." % (VERSIONFILE,))
 
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
+    requirements = [l for l in requirements if not l.startswith('#')]
 
 setup(
     name='tanglegram',
     version=verstr,
-    packages=['tanglegram',],
+    packages=find_packages(),
     license='GNU GPL V3',
     description='Plots simple tanglegrams from two dendrograms',
     long_description=open('README.md').read(),
-    url = 'https://github.com/schlegelp/tanglegram',
+    url='https://github.com/schlegelp/tanglegram',
     author='Philipp Schlegel',
-    author_email = 'pms70@cam.ac.uk',
+    author_email='pms70@cam.ac.uk',
     keywords='python tanglegram dendrogram',
 
     classifiers=[
@@ -40,15 +43,9 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
 
-    install_requires=[
-        "scipy>=0.18.1",
-        "numpy>=1.12.1",
-        "pandas",
-        "matplotlib>=2.0.0",
-        "tqdm"
-    ],
+    install_requires=requirements,
 
     python_requires='>=3',
 
-    zip_safe = False
+    zip_safe=False
 )
