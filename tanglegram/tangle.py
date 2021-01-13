@@ -54,10 +54,9 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
+def gen_tangle(a, b, labelsA=None, labelsB=None,
                color_by_diff=True, link_kwargs={}, dend_kwargs={}):
     """ Plots a tanglegram from two dendrograms.
-
     Parameters
     ----------
     (a,b) :                 pandas.DataFrame | scipy.cluster.hierarchy.linkage
@@ -76,7 +75,6 @@ def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
                             Keyword arguments to be passed on to ``scipy.cluster.hierarchy.linkage``
     dend_kwargs :           dict, optional
                             Keyword arguments to be passed on to ``scipy.cluster.hierarchy.dendrogram``
-
     Returns
     -------
     matplotlib figure
@@ -86,28 +84,26 @@ def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
 
     if isinstance(a, pd.DataFrame):
         module_logger.info('Generating linkage from dataframe')
-        linkage1 = sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs)
+        link1 = sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs)
         if not labelsA:
             labelsA = a.columns.tolist()
     elif isinstance(a, np.ndarray):
-        linkage1 = a
+        link1 = a
     else:
         raise TypeError('Parameter <a> needs to be either pandas DataFrame or numpy array')
 
     if isinstance(b, pd.DataFrame):
         module_logger.info('Generating linkage from dataframe')
-        linkage2 = sclust.hierarchy.linkage(sdist.squareform(b, checks=False), **link_kwargs)
+        link2 = sclust.hierarchy.linkage(sdist.squareform(b, checks=False), **link_kwargs)
         if not labelsB:
             labelsB = b.columns.tolist()
     elif isinstance(b, np.ndarray):
-        linkage2 = b
+        link2 = b
     else:
         raise TypeError('Parameter <b> needs to be either pandas DataFrame or numpy array')
 
-    if optimize_order:
-        linkage1, linkage2 = _optimize_leaf_order(linkage1, linkage2,
-                                                  labelsA, labelsB,
-                                                  max_iter = optimize_order)
+
+    linkage1, linkage2, save_entang = _optimize_leaf_order(link1, link2, labelsA, labelsB)
 
     fig = pylab.figure(figsize=(8, 8))
 
@@ -171,73 +167,148 @@ def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=10000,
 
     module_logger.info('Done. Use matplotlib.pyplot.show() to show plot.')
 
-    return fig
+    return fig, save_entang
 
+# This function will switch objects
+def rotate(linkage, i):
+    linkage[i] = [linkage[i, 1], linkage[i, 0], linkage[i, 2], linkage[i, 3]]
+    return linkage
 
-def _optimize_leaf_order(link1, link2, labels1, labels2, max_iter):
+# This function helps to interchange objects position, from bottom to "li_MID" place and get a combination of dendrogram layouts
+def get_all_linkage(linkage, li_MID):
+    length = len(linkage)
+    linkage = linkage.reshape(-1, length, 4)
+    i = length-1
+    while i >= li_MID:
+        for item in linkage:
+            new = item.copy()
+            new[i] = [new[i, 1], new[i, 0], new[i, 2], new[i, 3]]
+            linkage = np.append(linkage, new)
+            linkage = linkage.reshape(-1, length, 4)
+        i -= 1
+    return linkage
+
+# This function tries to rotate dendrograms from bottom to "li_MID" and find ones with the smallest entanglement
+# Coarse optimization
+def bottom_up(li_MID, link1, link2, min_entang, labels1, labels2):          
+    for i in range(li_MID):
+        dend1 = sclust.hierarchy.dendrogram(link1, labels=labels1)
+        dend2 = sclust.hierarchy.dendrogram(link2, labels=labels2)
+        min_entang = get_entanglement(dend1, dend2)
+        save = []
+        temp1 = link1.copy()
+        temp2 = link2.copy()
+        new1 = rotate(temp1, i)
+        new2 = rotate(temp2, i)
+        all1 = np.append([link1], [new1], axis=0)
+        all2 = np.append([link2], [new2], axis=0)
+        for j in all1:
+            dend1 = sclust.hierarchy.dendrogram(j, labels=labels1)
+            for k in all2:
+                dend2 = sclust.hierarchy.dendrogram(k, labels=labels2)
+                new_entang = get_entanglement(dend1, dend2)
+
+                if new_entang < min_entang:
+                    min_entang = new_entang
+                    link1 = j
+                    link2 = k
+        save.append(min_entang)
+    return link1, link2, min_entang, save
+
+# This function makes the lines between alike objects horizontal
+# Fine optimization
+def refine(best_linkage1, best_linkage2, min_entang, labels1, labels2):
+    dend1 = sclust.hierarchy.dendrogram(best_linkage1, labels=labels1)
+    dend2 = sclust.hierarchy.dendrogram(best_linkage2, labels=labels2)
+    for dem, z in enumerate(dend1["ivl"]):
+        if z != dend2["ivl"].index(z):
+            find1 = labels1.index(z)
+            find2 = labels2.index(z)
+            for num, item in enumerate(best_linkage1):
+                if item[0] == find1 or item[1] == find1:
+                    knot1 = num
+            for num, item in enumerate(best_linkage2):
+                if item[0] == find2 or item[1] == find2:
+                    knot2 = num
+            temp1 = best_linkage1.copy()
+            temp2 = best_linkage2.copy()
+            new1 = rotate(temp1, knot1)
+            new2 = rotate(temp2, knot2)
+            all1 = np.append([best_linkage1], [new1], axis=0)
+            all2 = np.append([best_linkage2], [new2], axis=0)
+            save = []
+            for j in all1:
+                dend1 = sclust.hierarchy.dendrogram(j, labels=labels1)
+                for k in all2:
+                    dend2 = sclust.hierarchy.dendrogram(k, labels=labels2)
+                    new_entang = get_entanglement(dend1, dend2)
+                    if new_entang < min_entang:
+                        min_entang = new_entang
+                        best_linkage1 = j
+                        best_linkage2 = k
+            save.append(min_entang)
+
+    return best_linkage1, best_linkage2, min_entang, save
+
+def _optimize_leaf_order(linkage_matrix1, linkage_matrix2, labels1, labels2):
     """ Optimizes leaf order of linkage 1 and 2 to best match each other.
-
     Parameters
     ----------
     (link1,link2) :     scipy.cluster.hierarchy.linkage
                         linkages to be matched
     (labels1,labels2) : list of str
-
-
     Returns
     -------
     optimized linkage
     """
 
-    dend1 = sclust.hierarchy.dendrogram(link1, orientation = 'left',
-                                        no_plot=True, labels=labels1)
-    dend2 = sclust.hierarchy.dendrogram(link2, orientation = 'right',
-                                        no_plot=True, labels=labels2)
+    old_entang = -1
+    cond = 1
+    final_entang = 10
+    save_entang = []
 
-    entangles =[get_entanglement(dend1, dend2)]
+    for li_MID in range(len(linkage_matrix1) - 1, 1, -1):
+        all_linkage1 = get_all_linkage(linkage_matrix1, li_MID)
+        all_linkage2 = get_all_linkage(linkage_matrix2, li_MID)
 
-    pbar = trange(max_iter)
+        for i in all_linkage1:
+            for j in all_linkage2:
+                best_linkage1 = i
+                best_linkage2 = j
+                dend1 = sclust.hierarchy.dendrogram(best_linkage1, labels=labels1)
+                dend2 = sclust.hierarchy.dendrogram(best_linkage2, labels=labels2)
+                min_entang = get_entanglement(dend1, dend2)
+                old_rem = -1
+                if len(save_entang) == 0:
+                    save_entang.append(min_entang)
+                for k in range(10):
+                    # Coarse optimization
+                    best_linkage1, best_linkage2, min_entang, save = bottom_up(li_MID, best_linkage1, best_linkage2,
+                                                                               min_entang, labels1, labels2)
 
-    for i in pbar:
-        temp_link1 = link1.copy()
-        temp_link2 = link2.copy()
+                    if old_rem == min_entang:
+                        # print("break")
+                        break
+                    old_rem = min_entang
 
-        # Go over all "hinges" of the dendrogram
-        for k in range(len(link2)):
-            # In 50% of the cases turn the hinge
-            if random.randint(0, 100) > 50:
-                temp_link2[k] = [temp_link2[k][1], temp_link2[k][0], temp_link2[k][2], temp_link2[k][3]]
+                # Fine optimization
+                best_linkage1, best_linkage2, min_entang, save = refine(best_linkage1, best_linkage2, min_entang,
+                                                                        labels1, labels2)
 
-        # Do the same for other dendrogram
-        for k in range(len(link1)):
-            if random.randint(0,100) > 50:
-                temp_link1[k] = [temp_link1[k][1], temp_link1[k][0], temp_link1[k][2], temp_link1[k][3]]
-
-        # Generate actual dendrogram to get leaf order
-        dend1 = sclust.hierarchy.dendrogram(temp_link1, orientation = 'left',
-                                            no_plot=True, labels=labels1)
-        dend2 = sclust.hierarchy.dendrogram(temp_link2, orientation = 'right',
-                                            no_plot=True, labels=labels2)
-
-        # Test new entanglement -> keep if better then previous
-        new_entangle = get_entanglement(dend1, dend2)
-        if entangles[-1] >= new_entangle:
-            entangles.append(new_entangle)
-            link1 = temp_link1
-            link2 = temp_link2
-        else:
-            entangles.append( entangles[-1] )
-
-        if i > 0 and i % 100 == 0:
-            slope = round(entangles[-1] - np.mean(entangles[-100:-1]), 2)
-            pbar.set_description('Optimising {0}'.format(slope))
-
-    pbar.close()
-
-    module_logger.info('Finished optimising at entanglement {0}'.format(round(entangles[-1], 4)))
-
-
-    return link1,link2
+                if min_entang < final_entang:
+                    final_linkage1 = best_linkage1
+                    final_linkage2 = best_linkage2
+                    final_entang = min_entang
+                save_entang.append(final_entang)
+                
+        if old_entang == final_entang:
+            cond += 1
+        old_entang = final_entang
+        if cond == 2:
+            break
+    plt.clf()
+    module_logger.info('Finished optimising at entanglement {0}'.format(final_entang))
+    return final_linkage1, final_linkage2, save_entang
 
 
 def get_entanglement(dend1, dend2):
