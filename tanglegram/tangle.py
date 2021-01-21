@@ -15,8 +15,6 @@
 #    You should have received a copy of the GNU General Public License
 #    along
 
-# TODO:
-# - make optimize function use diminishing-returns function instead of fixed runs
 
 import matplotlib.pyplot as plt
 import scipy.cluster as sclust
@@ -26,17 +24,7 @@ import pandas as pd
 import pylab
 import math
 import logging
-import random
 
-from tqdm import tqdm, trange
-try:
-    ipy_str = str(type(get_ipython()))
-    if 'zmqshell' in ipy_str:
-        from tqdm import tqdm_notebook, tnrange
-        tqdm = tqdm_notebook
-        trange = tnrange
-except:
-    pass
 
 __all__ = ['gen_tangle', 'get_entanglement']
 
@@ -54,9 +42,10 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def gen_tangle(a, b, labelsA=None, labelsB=None,
+def gen_tangle(a, b, labelsA=None, labelsB=None, optimize_order=True,
                color_by_diff=True, link_kwargs={}, dend_kwargs={}):
-    """ Plots a tanglegram from two dendrograms.
+    """Plot a tanglegram from two dendrograms.
+
     Parameters
     ----------
     (a,b) :                 pandas.DataFrame | scipy.cluster.hierarchy.linkage
@@ -66,68 +55,66 @@ def gen_tangle(a, b, labelsA=None, labelsB=None,
     (labelsA,labelsB) :     list of str
                             If not provided and a/b are pandas Dataframes,
                             will try to extract from columns.
-    optimize_order :        bool | int, optional
-                            If not False, will try rearranging dendrogram to
-                            optimise pairing of similar values. Currently uses
-                            brute force approach -> might give varying results
-                            on each iteration.
+    optimize_order :        bool
+                            If True, will try rearranging dendrogram to
+                            optimise pairing of similar values.
     link_kwargs :           dict, optional
                             Keyword arguments to be passed on to ``scipy.cluster.hierarchy.linkage``
     dend_kwargs :           dict, optional
                             Keyword arguments to be passed on to ``scipy.cluster.hierarchy.dendrogram``
+
     Returns
     -------
     matplotlib figure
-    """
 
+    """
     plt.style.use('ggplot')
 
     if isinstance(a, pd.DataFrame):
-        module_logger.info('Generating linkage from dataframe')
+        module_logger.info('Generating linkage from distances')
         link1 = sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs)
         if not labelsA:
             labelsA = a.columns.tolist()
     elif isinstance(a, np.ndarray):
         link1 = a
     else:
-        raise TypeError('Parameter <a> needs to be either pandas DataFrame or numpy array')
+        raise TypeError('Parameter `a` needs to be either pandas DataFrame or numpy array')
 
     if isinstance(b, pd.DataFrame):
-        module_logger.info('Generating linkage from dataframe')
+        module_logger.info('Generating linkage from distances')
         link2 = sclust.hierarchy.linkage(sdist.squareform(b, checks=False), **link_kwargs)
         if not labelsB:
             labelsB = b.columns.tolist()
     elif isinstance(b, np.ndarray):
         link2 = b
     else:
-        raise TypeError('Parameter <b> needs to be either pandas DataFrame or numpy array')
+        raise TypeError('Parameter `b` needs to be either pandas DataFrame or numpy array')
 
-
-    linkage1, linkage2, save_entang = _optimize_leaf_order(link1, link2, labelsA, labelsB)
+    if optimize_order:
+        link1, link2, save_entang = _optimize_leaf_order(link1, link2, labelsA, labelsB)
 
     fig = pylab.figure(figsize=(8, 8))
 
     # Compute and plot left dendrogram.
     ax1 = fig.add_axes([0.05, 0.1, 0.25, 0.8])
-    Z1 = sclust.hierarchy.dendrogram(linkage1, orientation='left', labels=labelsA, **dend_kwargs)
+    Z1 = sclust.hierarchy.dendrogram(link1, orientation='left', labels=labelsA, **dend_kwargs)
     #ax1.set_xticks([])
     #ax1.set_yticks([])
 
     # Compute and plot right dendrogram.
-    ax2 = fig.add_axes([0.7, 0.1, 0.25, 0.8])#[0.3, 0.71, 0.6, 0.2])
-    Z2 = sclust.hierarchy.dendrogram(linkage2, labels=labelsB, orientation='right', **dend_kwargs)
+    ax2 = fig.add_axes([0.7, 0.1, 0.25, 0.8]) #[0.3, 0.71, 0.6, 0.2])
+    Z2 = sclust.hierarchy.dendrogram(link2, labels=labelsB, orientation='right', **dend_kwargs)
     #ax2.set_xticks([])
     #ax2.set_yticks([])
 
-    if True in [l not in Z2['ivl'] for l in Z1['ivl']]:
-        #plt.clf()
-        #raise ValueError('Mismatch of dendrogram labels - unable to compare')
-        module_logger.warning('Labels {0} do not exist in both dendrograms'.format(set([l for l in Z1['ivl'] if l not in Z2['ivl']] + [l for l in Z2['ivl'] if l not in Z1['ivl']])))
+    missing = list(set([l for l in Z1['ivl'] if l not in Z2['ivl']] + [l for l in Z2['ivl'] if l not in Z1['ivl']]))
+    if any(missing):
+        module_logger.warning('Labels {0} do not exist in both dendrograms'.format(missing))
 
     # Generate middle plot with connecting lines
     ax3 = fig.add_axes([0.4, 0.1, 0.2, 0.8])
     ax3.axis('off')
-    ax3.set_xlim((0,1))
+    ax3.set_xlim((0, 1))
 
     # Get min and max y dimensions
     max_y = max(ax1.viewLim.y1, ax2.viewLim.y1)
@@ -145,38 +132,52 @@ def gen_tangle(a, b, labelsA=None, labelsB=None,
         _.set_ylim((min_y, max_y))
 
     # Now iterate over all left leaves
-    for ix_l,l in enumerate(Z1['ivl']):
+    for ix_l, l in enumerate(Z1['ivl']):
         # Skip if no corresponding element
         if l not in Z2['ivl']:
             continue
 
         ix_r = Z2['ivl'].index(l)
 
-        coords_l = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z1['leaves'])) * (ix_l+.5)
-        coords_r = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z2['leaves'])) * (ix_r+.5)
+        coords_l = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z1['leaves'])) * (ix_l + .5)
+        coords_r = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z2['leaves'])) * (ix_r + .5)
 
         if not color_by_diff:
             c = 'black'
         else:
-            v = max(round(.75 - math.fabs(ix_l - ix_r) / len( Z1['ivl'] ), 2), 0)
+            v = max(round(.75 - math.fabs(ix_l - ix_r) / len(Z1['ivl']), 2), 0)
             c = (v, v, v)
 
-        ax3.plot([0, 1], [coords_l,coords_r], '-', linewidth=1, c=c)
+        ax3.plot([0, 1], [coords_l, coords_r], '-', linewidth=1, c=c)
 
     module_logger.info('Done. Use matplotlib.pyplot.show() to show plot.')
 
-    return fig, save_entang
+    return fig
 
-# This function will switch objects
-def rotate(linkage, i):
+
+def rotate(linkage, i, copy=True):
+    """Rotate linkage at given hinge."""
+    if copy:
+        linkage = linkage.copy()
+    # Rotate
     linkage[i] = [linkage[i, 1], linkage[i, 0], linkage[i, 2], linkage[i, 3]]
+
     return linkage
 
-# This function helps to interchange objects position, from bottom to "li_MID" place and get a combination of dendrogram layouts
+
 def get_all_linkage(linkage, li_MID):
+    """Generate all possible combinations of rotations for a given linkage.
+
+    Parameters
+    ----------
+    linkage :       scipy.cluster.hierarchy.linkage
+    li_MID :        int
+                    Index of the linkage at which to stop rotating.
+
+    """
     length = len(linkage)
     linkage = linkage.reshape(-1, length, 4)
-    i = length-1
+    i = length - 1
     while i >= li_MID:
         for item in linkage:
             new = item.copy()
@@ -186,145 +187,196 @@ def get_all_linkage(linkage, li_MID):
         i -= 1
     return linkage
 
-# This function tries to rotate dendrograms from bottom to "li_MID" and find ones with the smallest entanglement
-# Coarse optimization
+
 def bottom_up(li_MID, link1, link2, min_entang, labels1, labels2):
+    """Rotate dendrogram from bottom to "li_MID" and find smallest entanglement."""
+    # Find leafs and entanglement of start position
+    leafs1 = sclust.hierarchy.leaves_list(link1)
+    leafs2 = sclust.hierarchy.leaves_list(link2)
+    lindex1 = dict(zip(labels1, leafs1))
+    lindex2 = dict(zip(labels2, leafs2))
+    min_entang = get_entanglement(lindex1, lindex2)
+
+    # No go over each hinge/knot from bottom to "li_MID" and rotate it
     for i in range(li_MID):
-        dend1 = sclust.hierarchy.dendrogram(link1, labels=labels1, no_plot=True)
-        dend2 = sclust.hierarchy.dendrogram(link2, labels=labels2, no_plot=True)
-        min_entang = get_entanglement(dend1, dend2)
-        save = []
-        temp1 = link1.copy()
-        temp2 = link2.copy()
-        new1 = rotate(temp1, i)
-        new2 = rotate(temp2, i)
-        all1 = np.append([link1], [new1], axis=0)
-        all2 = np.append([link2], [new2], axis=0)
-        for j in all1:
-            dend1 = sclust.hierarchy.dendrogram(j, labels=labels1, no_plot=True)
-            for k in all2:
-                dend2 = sclust.hierarchy.dendrogram(k, labels=labels2, no_plot=True)
-                new_entang = get_entanglement(dend1, dend2)
+        # Rotate left and right linkage
+        new1 = rotate(link1, i)
+        new2 = rotate(link2, i)
+
+        # Generate leafs for the new variants
+        leafsn1 = sclust.hierarchy.leaves_list(new1)
+        leafsn2 = sclust.hierarchy.leaves_list(new2)
+        lindexn1 = dict(zip(labels1, leafsn1))
+        lindexn2 = dict(zip(labels2, leafsn2))
+
+        # Now test pairwise entanglement
+        for j, lx1 in zip([link1, new1],
+                          [lindex1, lindexn1]):
+            for k, lx2 in zip([link2, new2],
+                              [lindex2, lindexn2]):
+                new_entang = get_entanglement(lx1, lx2)
 
                 if new_entang < min_entang:
                     min_entang = new_entang
                     link1 = j
                     link2 = k
-        save.append(min_entang)
-    return link1, link2, min_entang, save
+                    lindex1 = lx1
+                    lindex2 = lx2
 
-# This function makes the lines between alike objects horizontal
-# Fine optimization
+    return link1, link2, min_entang
+
+
 def refine(best_linkage1, best_linkage2, min_entang, labels1, labels2):
-    dend1 = sclust.hierarchy.dendrogram(best_linkage1, labels=labels1, no_plot=True)
-    dend2 = sclust.hierarchy.dendrogram(best_linkage2, labels=labels2, no_plot=True)
-    for dem, z in enumerate(dend1["ivl"]):
-        if z != dend2["ivl"].index(z):
-            find1 = labels1.index(z)
-            find2 = labels2.index(z)
+    """Refine rotation to maximize horizontal lines."""
+    leafs1 = sclust.hierarchy.leaves_list(best_linkage1)
+    leafs2 = sclust.hierarchy.leaves_list(best_linkage2)
+    lindex1 = dict(zip(labels1, leafs1))
+    lindex2 = dict(zip(labels2, leafs2))
+
+    for k, z in lindex1.items():
+        if z != lindex2[k]:
+            find1 = lindex1[k]
+            find2 = lindex2[k]
             for num, item in enumerate(best_linkage1):
                 if item[0] == find1 or item[1] == find1:
                     knot1 = num
             for num, item in enumerate(best_linkage2):
                 if item[0] == find2 or item[1] == find2:
                     knot2 = num
-            temp1 = best_linkage1.copy()
-            temp2 = best_linkage2.copy()
-            new1 = rotate(temp1, knot1)
-            new2 = rotate(temp2, knot2)
+            new1 = rotate(best_linkage1, knot1)
+            new2 = rotate(best_linkage2, knot2)
             all1 = np.append([best_linkage1], [new1], axis=0)
             all2 = np.append([best_linkage2], [new2], axis=0)
-            save = []
+
+            all1_lindices = []
             for j in all1:
-                dend1 = sclust.hierarchy.dendrogram(j, labels=labels1, no_plot=True)
-                for k in all2:
-                    dend2 = sclust.hierarchy.dendrogram(k, labels=labels2, no_plot=True)
-                    new_entang = get_entanglement(dend1, dend2)
+                leafs1 = sclust.hierarchy.leaves_list(j)
+                all1_lindices.append(dict(zip(labels1, leafs1)))
+
+            all2_lindices = []
+            for k in all2:
+                leafs2 = sclust.hierarchy.leaves_list(k)
+                all2_lindices.append(dict(zip(labels2, leafs2)))
+
+            for j, lindex1 in zip(all1, all1_lindices):
+                for k, lindex2 in zip(all2, all2_lindices):
+                    new_entang = get_entanglement(lindex1, lindex2)
                     if new_entang < min_entang:
                         min_entang = new_entang
                         best_linkage1 = j
                         best_linkage2 = k
-            save.append(min_entang)
 
-    return best_linkage1, best_linkage2, min_entang, save
+    return best_linkage1, best_linkage2, min_entang
+
 
 def _optimize_leaf_order(linkage_matrix1, linkage_matrix2, labels1, labels2):
-    """ Optimizes leaf order of linkage 1 and 2 to best match each other.
+    """Optimizes leaf order of linkage 1 and 2 to best match each other.
+
     Parameters
     ----------
-    (link1,link2) :     scipy.cluster.hierarchy.linkage
-                        linkages to be matched
-    (labels1,labels2) : list of str
+    linkage_matrix1 :     scipy.cluster.hierarchy.linkage
+                          First of the two linkages to be matched.
+    linkage_matrix2 :     scipy.cluster.hierarchy.linkage
+                          Second of the two linkages to be matched.
+    labels1, labels2 :    lists of str
+
     Returns
     -------
-    optimized linkage
-    """
+    optimized linkage1
+    optimized linkage2
+    entanglement
 
-    old_entang = -1
-    cond = 1
-    final_entang = 10
-    save_entang = []
+    """
+    final_entang = float('inf')
+    cond = 0
 
     for li_MID in range(len(linkage_matrix1) - 1, 1, -1):
+        old_entang = final_entang
+        # Generate all possible combinations for rotating the dendrogram
+        # at the hinges up to the given height
         all_linkage1 = get_all_linkage(linkage_matrix1, li_MID)
         all_linkage2 = get_all_linkage(linkage_matrix2, li_MID)
 
+        # Calculate label indices for all variants
+        all_lindex1 = []
         for i in all_linkage1:
-            for j in all_linkage2:
+            leafs1 = sclust.hierarchy.leaves_list(i)
+            all_lindex1.append(dict(zip(labels1, leafs1)))
+
+        all_lindex2 = []
+        for j in all_linkage2:
+            leafs2 = sclust.hierarchy.leaves_list(j)
+            all_lindex2.append(dict(zip(labels2, leafs2)))
+
+        for i, lindex1 in zip(all_linkage1, all_lindex1):
+            for j, lindex2 in zip(all_linkage2, all_lindex2):
                 best_linkage1 = i
                 best_linkage2 = j
-                dend1 = sclust.hierarchy.dendrogram(best_linkage1, labels=labels1, no_plot=True)
-                dend2 = sclust.hierarchy.dendrogram(best_linkage2, labels=labels2, no_plot=True)
-                min_entang = get_entanglement(dend1, dend2)
 
-                if len(save_entang) == 0:
-                    save_entang.append(min_entang)
-
-                old_entang = min_entang
-                count = 0
-                while count == 0:
-                    # Coarse optimization
-                    best_linkage1, best_linkage2, min_entang, save = bottom_up(li_MID, best_linkage1, best_linkage2,
-                                                                               min_entang, labels1, labels2)
-                    if old_entang == min_entang:
-                        count += 1
-                    old_entang = min_entang
-
-                # Fine optimization
-                best_linkage1, best_linkage2, min_entang, save = refine(best_linkage1, best_linkage2, min_entang,
-                                                                        labels1, labels2)
+                min_entang = get_entanglement(lindex1, lindex2)
 
                 if min_entang < final_entang:
                     final_linkage1 = best_linkage1
                     final_linkage2 = best_linkage2
                     final_entang = min_entang
-                save_entang.append(final_entang)
 
         # Convergence condition
         if old_entang == final_entang:
             cond += 1
         old_entang = final_entang
+
+        # Stop if entanglement has not improved twice
         if cond == 2:
             break
-    module_logger.info('Finished optimising at entanglement {0}'.format(final_entang))
-    return final_linkage1, final_linkage2, save_entang
 
-
-def get_entanglement(dend1, dend2):
-    """ Returns average displacement of leafs in dendogram 1 and 2. Skips
-    leafs that aren't present in both dendrograms.
     """
-    exist_in_both = [l for l in dend1['ivl'] if l in dend2['ivl']]
+    # See if we can squeeze out even more
+    old_entang = final_entang
+    while True:
+        # Coarse optimization
+        (final_linkage1,
+         final_linkage2,
+         final_entang,
+         save) = bottom_up(li_MID,
+                           final_linkage1, final_linkage2,
+                           final_entang,
+                           labels1, labels2)
+        # Stop if no more improvement
+        if final_entang >= old_entang:
+            break
+        old_entang = final_entang
+
+    # Fine optimization
+    (final_linkage1,
+     final_linkage2,
+     final_entang,
+     save) = refine(final_linkage1, final_linkage2,
+                    final_entang,
+                    labels1, labels2)
+    """
+    module_logger.info('Finished optimising at entanglement {0}'.format(final_entang))
+    return final_linkage1, final_linkage2, []
+
+
+def get_entanglement(lindex1, lindex2):
+    """Calculage average displacement of leafs in dendogram 1 and 2.
+
+    Ignores leafs that aren't present in both dendrograms.
+    """
+    assert isinstance(lindex1, dict)
+    assert isinstance(lindex2, dict)
+
+    exist_in_both = list(set(lindex1) & set(lindex2))
 
     if not exist_in_both:
-        raise ValueError('No matching labels in dendrograms.')
+        raise ValueError('Not a single matching label in both dendrograms.')
 
-    return sum([math.fabs(dend1['ivl'].index(l) - dend2['ivl'].index(l)) for l in exist_in_both]) / len(exist_in_both)
+    return sum([math.fabs(lindex1[l] - lindex2[l]) for l in exist_in_both]) / len(exist_in_both)
 
 
 if __name__ == '__main__':
-    labelsA= ['A', 'B', 'C', 'D']
-    labelsB= ['B', 'A', 'C', 'D']
+    labelsA = ['A', 'B', 'C', 'D']
+    labelsB = ['B', 'A', 'C', 'D']
     data = [[ 0,  .1,  .4, .3],
             [.1,   0,  .5, .6],
             [ .4, .5,   0, .2],
@@ -339,6 +391,5 @@ if __name__ == '__main__':
                         index=labelsB)
 
     # Plot tanglegram
-    fig = gen_tangle(mat1, mat2, optimize_order=False)
+    fig = gen_tangle(mat1, mat2)
     plt.show()
-
