@@ -23,6 +23,7 @@ setup(
     license='GNU GPL V3',
     description='Plots simple tanglegrams from two dendrograms',
     long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     url='https://github.com/schlegelp/tanglegram',
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
