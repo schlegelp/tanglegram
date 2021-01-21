@@ -328,19 +328,17 @@ def _optimize_leaf_order(linkage_matrix1, linkage_matrix2, labels1, labels2):
         # Stop if entanglement has not improved twice
         if cond == 2:
             break
-
-    """
+            
     # See if we can squeeze out even more
     old_entang = final_entang
     while True:
         # Coarse optimization
         (final_linkage1,
          final_linkage2,
-         final_entang,
-         save) = bottom_up(li_MID,
-                           final_linkage1, final_linkage2,
-                           final_entang,
-                           labels1, labels2)
+         final_entang) = bottom_up(li_MID,
+                                   final_linkage1, final_linkage2,
+                                   final_entang,
+                                   labels1, labels2)
         # Stop if no more improvement
         if final_entang >= old_entang:
             break
@@ -349,11 +347,10 @@ def _optimize_leaf_order(linkage_matrix1, linkage_matrix2, labels1, labels2):
     # Fine optimization
     (final_linkage1,
      final_linkage2,
-     final_entang,
-     save) = refine(final_linkage1, final_linkage2,
-                    final_entang,
-                    labels1, labels2)
-    """
+     final_entang) = refine(final_linkage1, final_linkage2,
+                            final_entang,
+                            labels1, labels2)
+
     module_logger.info('Finished optimising at entanglement {0}'.format(final_entang))
     return final_linkage1, final_linkage2, []
 
