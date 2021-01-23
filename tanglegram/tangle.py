@@ -219,14 +219,19 @@ class CachedGenerator:
         return value
 
 
-def get_all_linkage_gen(linkage, li_MID, labels):
+def get_all_linkage_gen(linkage, stop, labels, start=0):
     """Generator for all possible combinations of rotations for a given linkage.
 
     Parameters
     ----------
     linkage :       scipy.cluster.hierarchy.linkage
-    li_MID :        int
-                    Index of the linkage at which to stop rotating.
+    start :         int
+                    Index of the linkage at which to stop rotating. Counts from
+                    top.
+    labels :        list
+                    Labels for given linkage.
+    start :         int
+                    At what hinge to start returning permutations.
 
     Yields
     ------
@@ -238,34 +243,40 @@ def get_all_linkage_gen(linkage, li_MID, labels):
     """
     length = len(linkage)
     linkage = linkage.reshape(-1, length, 4)
+
+    # Invert to/from
+    start = length - 1 - start
+    stop = length - 1 - stop
+
     i = length - 1
-    while i >= li_MID:
-        for item in linkage:
+    while i > stop:
+        # Use range because linkage will change in size as we edit it
+        for j in range(len(linkage)):
             # This is the new linkage matrix
-            new = item.copy()
-            new[i] = [new[i, 1], new[i, 0], new[i, 2], new[i, 3]]
+            new = linkage[j].copy()
+            new[i][0], new[i][1] = new[i][1], new[i][0]
 
-            # This is the leaf order
-            lindex = leaf_order(new, labels, as_dict=True)
+            if i <= start:
+                # This is the leaf order
+                lindex = leaf_order(new, labels, as_dict=True)
 
-            yield new, lindex
+                yield new, lindex
 
             linkage = np.append(linkage, new)
             linkage = linkage.reshape(-1, length, 4)
-
         i -= 1
 
 
-def bottom_up(li_MID, link1, link2, labels1, labels2, L=1.5):
-    """Rotate dendrogram from bottom to "li_MID" and find smallest entanglement."""
+def bottom_up(stop, link1, link2, labels1, labels2, L=1.5):
+    """Rotate dendrogram from bottom to "stop" and find smallest entanglement."""
     # Find leafs and entanglement of start position
     lindex1 = leaf_order(link1, labels1, as_dict=True)
     lindex2 = leaf_order(link2, labels2, as_dict=True)
     min_entang = entanglement(lindex1, lindex2, L=L)
     org_entang = float(min_entang)
 
-    # No go over each hinge/knot from bottom to "li_MID" and rotate it
-    for i in range(li_MID):
+    # No go over each hinge/knot from bottom to "stop" and rotate it
+    for i in range(stop):
         # Rotate left and right linkage
         new1 = rotate(link1, i)
         new2 = rotate(link2, i)
@@ -374,7 +385,7 @@ def untangle(link1, link2, labels1, labels2, method='random', L=1.5, **kwargs):
         raise ValueError(f'Unknown method "{method}"')
 
 
-def untangle_permutations(link1, link2, labels1, labels2, L=1.5,
+def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
                           target_ent=0, progress=True):
     """Untangle by greedily testing all possible permutations of rotations.
 
@@ -396,6 +407,10 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5,
     L :                 float
                         Distance norm used to calculate the entanglement.
                         Passed to ``entanglement()``.
+    n_permute :         int
+                        Number of hinges from to permute. Positive values count
+                        from the top, negative from the bottom. The default of
+                        -1 means that permutations will be run for all hinges.
     target_ent :        float [0-1]
                         Target entanglement.
     progress :          bool
@@ -407,26 +422,42 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5,
                         Reordered linkages.
 
     """
+    # TODO:
+    # - once all possible permutations are computed, we could test them using
+    #   parallel processes
+
     # Keep track of past entanglements
     entang = [float('inf')]
 
     bar_format = ("{l_bar}{bar}| [{elapsed}<{remaining}, "
-                  "{rate_fmt}, N {postfix[0]}, entangl {postfix[1]:.4f}]")
-    with tqdm(desc='Searching', leave=False, total=2, postfix=[1, 1],
+                  "{rate_fmt}, N {postfix[0]}/{postfix[1]}, "
+                  "entangl {postfix[2]:.4f}]")
+
+    if n_permute == 0:
+        raise ValueError('`n_permute` must not be zero')
+    elif n_permute < 0:
+        # Translate to count from top
+        n_permute = len(link1) - (n_permute + 1)
+    elif n_permute > len(link1):
+        raise ValueError('`n_permute` must not be great than number of hinges')
+
+    with tqdm(desc='Searching', leave=False, total=2,
+              postfix=[1, n_permute, 1],
               bar_format=bar_format, disable=not progress) as pbar:
-        for i in range(len(link1) - 1):
-            li_MID = len(link1) - 1 - i
+        for ix in range(1, n_permute):
             # Keep track of minimal entanglement this round
             min_entang = entang[-1]
 
             if progress:
-                pbar.total = (2**(i+1))**2
+                pbar.total = ((2**ix-1) - (2**(ix-1)-1))**2
                 pbar.n = 0
-                pbar.postfix[0] = i
+                pbar.postfix[0] = ix
 
             # Now test these combinations
-            for i, lindex1 in get_all_linkage_gen(link1, li_MID, labels1):
-                for j, lindex2 in get_all_linkage_gen(link2, li_MID, labels2):
+            link_gen1 = get_all_linkage_gen(link1, stop=ix, labels=labels1, start=ix-1)
+            for i, lindex1 in link_gen1:
+                link_gen2 = get_all_linkage_gen(link2, stop=ix, labels=labels2, start=ix-1)
+                for j, lindex2 in link_gen2:
                     best_linkage1 = i
                     best_linkage2 = j
 
@@ -435,7 +466,7 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5,
                     (best_linkage1,
                      best_linkage2,
                      this_entang,
-                     improved1) = bottom_up(li_MID,
+                     improved1) = bottom_up(ix,
                                             best_linkage1, best_linkage2,
                                             labels1, labels2, L=L)
 
@@ -454,7 +485,7 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5,
                         min_entang = this_entang
 
                         if progress:
-                            pbar.postfix[1] = this_entang
+                            pbar.postfix[2] = this_entang
 
                     if progress:
                         pbar.update()
