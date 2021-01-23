@@ -46,7 +46,7 @@ if not module_logger.handlers:
 
 
 def plot(a, b, labelsA=None, labelsB=None, sort=True,
-         color_by_diff=True, link_kwargs={}, dend_kwargs={}):
+         color_by_diff=True, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
     """Plot a tanglegram from two dendrograms.
 
     Parameters
@@ -65,9 +65,11 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True,
                             defaults to "random". See ``untangle()`` for a
                             full description.
     link_kwargs :           dict, optional
-                            Keyword arguments to be passed on to ``scipy.cluster.hierarchy.linkage``
+                            Keyword arguments to be passed to ``scipy.cluster.hierarchy.linkage``
     dend_kwargs :           dict, optional
-                            Keyword arguments to be passed on to ``scipy.cluster.hierarchy.dendrogram``
+                            Keyword arguments to be passed to ``scipy.cluster.hierarchy.dendrogram``
+    sort_kwargs :           dict, optional
+                            Keyword arguments to be passed to ``tanglegram.untangle``
 
     Returns
     -------
@@ -101,7 +103,7 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True,
             sort = 'random'
         link1, link2 = untangle(link1, link2,
                                 labelsA, labelsB,
-                                method=sort)
+                                method=sort, **sort_kwargs)
 
     fig = pylab.figure(figsize=(8, 8))
 
