@@ -247,6 +247,10 @@ def get_all_linkage_gen(linkage, stop, labels, start=0):
     stop = length - 1 - stop
 
     i = length - 1
+
+    if i <= start:
+        yield linkage[0], leaf_order(linkage[0], labels, as_dict=True)
+
     while i > stop:
         # Use range because linkage will change in size as we edit it
         for j in range(len(linkage)):
