@@ -742,9 +742,14 @@ def leaf_order(link, labels=None, as_dict=True):
     # This gives us the order of the original labels
     leafs_ix = sclust.hierarchy.leaves_list(link)
 
+    if invert:
+        mx = max(leafs_ix)
+        leafs_ix = [mx - i for i in leafs_ix]
+
     if as_dict:
         if not isinstance(labels, type(None)):
-            return dict(zip(labels, leafs_ix))
+            labels = np.asarray(labels)
+            return dict(zip(labels[leafs_ix], np.arange(len(leafs_ix))))
         else:
             return dict(zip(np.arange(len(leafs_ix)), leafs_ix))
     else:
