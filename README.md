@@ -9,7 +9,7 @@ First, get [PIP](https://pip.pypa.io/en/stable/installing/) and then run in term
 pip3 install tanglegram -U
 ```
 
-To install the bleeding edge version from Github you can run:
+To install the bleeding-edge version from Github you can run:
 
 ```
 pip3 install git+git://github.com/schlegelp/tanglegram@master
@@ -26,7 +26,13 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 - [Numpy](http://www.scipy.org)
 - [Matplotlib](http://www.matplotlib.org)
 
-## Quickstart
+## How it works
+
+`tanglegram` exposes three functions:
+
+1. `tanglegram.entanglement` measures the entanglement between two linkages
+2. `tanglegram.untangle` rotates dendrograms to minimize entanglement
+3. `tanglegram.plot` plots a tanglegram
 
 ```Python
 import tanglegram as tg
@@ -50,7 +56,7 @@ mat2 = pd.DataFrame(data,
                     index=labelsB)
 
 # Plot tanglegram
-fig = tg.gen_tangle(mat1, mat2, optimize_order=False)
+fig = tg.plot(mat1, mat2, sort=False)
 plt.show()
 ```
 
@@ -58,7 +64,7 @@ plt.show()
 
 ```Python
 # Plot again but this time try minimizing cross-over
-fig = tg.gen_tangle(mat1, mat2, optimize_order=True)
+fig = tg.plot(mat1, mat2, sort=True)
 plt.show()
 ```
 
