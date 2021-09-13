@@ -21,12 +21,10 @@ import scipy.cluster as sclust
 import scipy.spatial.distance as sdist
 import numpy as np
 import pandas as pd
-import pylab
 import math
 import logging
 
-from itertools import product
-from tqdm import trange, tqdm
+from tqdm import tqdm
 
 
 __all__ = ['plot', 'entanglement', 'untangle']
@@ -544,6 +542,8 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
 
     min_entang = float('inf')
 
+    ol = module_logger.level
+    module_logger.setLevel('WARNING')
     for i in range(int(max_n_iterations)):
         # Rotate the first dendrogram
         link1, link2 = untangle_step_rotate_1side(link1, link2,
@@ -571,6 +571,8 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
         if min_entang == 0:
             break
 
+    module_logger.setLevel(ol)
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
     return link1, link2
 
 
@@ -628,6 +630,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2,
         if min_entang == 0:
             break
 
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
     return link1, link2
 
 
@@ -682,6 +685,7 @@ def untangle_random_search(link1, link2, labels1, labels2, R=100, L=1.5):
         if min_entang == 0:
             break
 
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
     return link1, link2
 
 
