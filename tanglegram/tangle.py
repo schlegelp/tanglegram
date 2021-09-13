@@ -43,7 +43,7 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def plot(a, b, labelsA=None, labelsB=None, sort=True,
+def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
          color_by_diff=True, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
     """Plot a tanglegram from two dendrograms.
 
@@ -56,12 +56,14 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True,
     (labelsA,labelsB) :     list of str
                             If not provided and a/b are pandas Dataframes,
                             will try to extract from columns.
-    sort :                  bool | "random" | "step1side" | "step2side" | "permuations"
+    sort :                  bool | "random" | "step1side" | "step2side" | "permutations"
                             If True, will try rearranging dendrogram to
                             optimise pairing of similar values. You can provide
                             the exact method to use as a string. ``True``
                             defaults to "random". See ``untangle()`` for a
                             full description.
+    figsize :               tuple
+                            Size of the dendrogram.
     link_kwargs :           dict, optional
                             Keyword arguments to be passed to ``scipy.cluster.hierarchy.linkage``
     dend_kwargs :           dict, optional
@@ -100,10 +102,11 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True,
         if not isinstance(sort, str):
             sort = 'random'
         link1, link2 = untangle(link1, link2,
-                                labelsA, labelsB,
+                                np.asarray(labelsA),
+                                np.asarray(labelsB),
                                 method=sort, **sort_kwargs)
 
-    fig = pylab.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=figsize)
 
     # Compute and plot left dendrogram.
     ax1 = fig.add_axes([0.05, 0.1, 0.25, 0.8])
@@ -127,11 +130,8 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True,
     min_y = min(ax1.viewLim.y0, ax2.viewLim.y0)
 
     # Make sure labels of both dendrograms have the same font size
-    ax1.set_yticklabels(ax1.get_yticklabels(), fontsize=8)
-    ax2.set_yticklabels(ax2.get_yticklabels(), fontsize=8)
-
-    ax1.set_xticklabels(ax1.get_xticklabels(), fontsize=8)
-    ax2.set_xticklabels(ax2.get_xticklabels(), fontsize=8)
+    ax1.tick_params(axis='both', labelsize=8)
+    ax2.tick_params(axis='both', labelsize=8)
 
     # Make sure all y axes have same resolution
     for _ in [ax3]:  # [ax1,ax2,ax3]:
