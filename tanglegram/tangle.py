@@ -726,7 +726,7 @@ def shuffle_dendogram(link, copy=True):
     return s_link
 
 
-def leaf_order(link, labels=None, as_dict=True):
+def leaf_order(link, labels=None, as_dict=True, invert=False):
     """Generate leaf label order for given linkage.
 
     Parameters
@@ -738,6 +738,8 @@ def leaf_order(link, labels=None, as_dict=True):
     as_dict :   bool
                 If True (default), returns a dictionary mapping labels/indices
                 to leaf indices.
+    invert :    bool
+                If True will invert the order.
 
     Returns
     -------
@@ -803,7 +805,7 @@ def entanglement(lindex1, lindex2, L=1.5):
     ix = np.arange(max(len(lindex1), len(lindex2)))
     worst = np.sum(np.abs(ix - ix[::-1]) ** L)
 
-    # Normalized entanglemtn
+    # Normalized entanglement
     return ent / worst
 
 
