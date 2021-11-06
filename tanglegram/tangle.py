@@ -63,13 +63,16 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
                             defaults to "random". See ``untangle()`` for a
                             full description.
     figsize :               tuple
-                            Size of the dendrogram.
+                            Size of the figure.
     link_kwargs :           dict, optional
-                            Keyword arguments to be passed to ``scipy.cluster.hierarchy.linkage``
+                            Keyword arguments to be passed to
+                            ``scipy.cluster.hierarchy.linkage``.
     dend_kwargs :           dict, optional
-                            Keyword arguments to be passed to ``scipy.cluster.hierarchy.dendrogram``
+                            Keyword arguments to be passed to
+                            ``scipy.cluster.hierarchy.dendrogram``.
     sort_kwargs :           dict, optional
-                            Keyword arguments to be passed to ``tanglegram.untangle``
+                            Keyword arguments to be passed to
+                            ``tanglegram.untangle``.
 
     Returns
     -------
@@ -392,13 +395,13 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
     """Untangle by greedily testing all possible permutations of rotations.
 
     This algorithm has O(n^2)^2 complexity and can run very long! In brief:
-    1. Start at N = 1
-    2. Find all possible permutations of rotating the top N hinges
-    3. For each permutation, test the entanglement of rotating each individual
-       hinge from the bottom up to the top hinge.
-    4. Keep the combination of the best permutation + bottom-up rotations
-    5. Increase N by +1
-    6. Go back to step 2 and repeat until we reached our target entanglement.
+      1. Start at N = 1
+      2. Find all possible permutations of rotating the top N hinges
+      3. For each permutation, test the entanglement of rotating each individual
+         hinge from the bottom up to the top hinge.
+      4. Keep the combination of the best permutation + bottom-up rotations
+      5. Increase N by +1
+      6. Go back to step 2 and repeat until we reached our target entanglement.
 
     Parameters
     ----------
@@ -410,7 +413,7 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
                         Distance norm used to calculate the entanglement.
                         Passed to ``entanglement()``.
     n_permute :         int
-                        Number of hinges from to permute. Positive values count
+                        Number of hinges to permute. Positive values count
                         from the top, negative from the bottom. The default of
                         -1 means that permutations will be run for all hinges.
     target_ent :        float [0-1]

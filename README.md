@@ -30,9 +30,9 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 
 `tanglegram` exposes three functions:
 
-1. `tanglegram.entanglement` measures the entanglement between two linkages
-2. `tanglegram.untangle` rotates dendrograms to minimize entanglement
-3. `tanglegram.plot` plots a tanglegram
+1. `tanglegram.plot` plots a tanglegram (optionally untangling)
+2. `tanglegram.entanglement` measures the entanglement between two linkages
+3. `tanglegram.untangle` rotates dendrograms to minimize entanglement
 
 ```Python
 import tanglegram as tg
