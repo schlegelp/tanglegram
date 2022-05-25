@@ -42,8 +42,8 @@ labelsA= ['A', 'B', 'C', 'D']
 labelsB= ['B', 'A', 'C', 'D']
 data = [[ 0,  .1,  .4, .3],
         [.1,   0,  .5, .6],
-        [.4, .5,   0, .2],
-        [.3, .6,  .2,  0]]
+        [.4,  .5,   0, .2],
+        [.3,  .6,  .2,  0]]
 
 mat1 = pd.DataFrame(data,
                     columns=labelsA,
