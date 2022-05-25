@@ -12,11 +12,8 @@ pip3 install tanglegram -U
 To install the bleeding-edge version from Github you can run:
 
 ```
-pip3 install git+git://github.com/schlegelp/tanglegram@master
+pip3 install git+https://github.com/schlegelp/tanglegram@master
 ```
-
-**Attention**: on Windows, the dependencies (i.e. Numpy, Pandas and SciPy) will likely fail to install automatically. Your best bet is to get a Python distribution that already includes them (e.g. [Anaconda](https://www.continuum.io/downloads)).
-
 
 #### Dependencies
 Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install all external dependencies. You may run into problems on Windows though. In that case, you need to install dependencies manually, here is a list of dependencies (check out `install_requires` in [setup.py](https://raw.githubusercontent.com/schlegelp/PyMaid/master/setup.py) for version info):
@@ -25,6 +22,7 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 - [SciPy](http://www.scipy.org)
 - [Numpy](http://www.scipy.org)
 - [Matplotlib](http://www.matplotlib.org)
+- [tqdm](https://github.com/tqdm/tqdm)
 
 ## How it works
 
@@ -44,8 +42,8 @@ labelsA= ['A', 'B', 'C', 'D']
 labelsB= ['B', 'A', 'C', 'D']
 data = [[ 0,  .1,  .4, .3],
         [.1,   0,  .5, .6],
-        [ .4, .5,   0, .2],
-        [ .3, .6,  .2,  0]]
+        [.4, .5,   0, .2],
+        [.3, .6,  .2,  0]]
 
 mat1 = pd.DataFrame(data,
                     columns=labelsA,
