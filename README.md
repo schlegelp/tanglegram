@@ -28,7 +28,7 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 
 `tanglegram` exposes three functions:
 
-1. `tanglegram.plot` plots a tanglegram (optionally untangling)
+1. `tanglegram.plot` plots a tanglegram (untangling optionally)
 2. `tanglegram.entanglement` measures the entanglement between two linkages
 3. `tanglegram.untangle` rotates dendrograms to minimize entanglement
 
@@ -68,9 +68,18 @@ plt.show()
 
 <img src="https://user-images.githubusercontent.com/7161148/105351772-e8b85e00-5be4-11eb-9343-db42f143ec68.png" width="650">
 
+```Python
+# Alternatively, you can also explicitly provide the edges to plot and untangle  
+# Note how in this case the labels don't have to match anymore
+fig = tg.plot(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
+plt.show()
+```
+
+<img src="https://user-images.githubusercontent.com/7161148/196478917-e9488312-65b0-4e0c-8c8e-d000879dacde.png" width="650">
+
 
 ## Known Issues:
-* layout does not scale well, i.e. small dendrograms look weird
+- layout does not scale well, i.e. small dendrograms look weird
 
 ## License:
 This code is under GNU GPL V3
