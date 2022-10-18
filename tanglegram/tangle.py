@@ -43,8 +43,8 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
-         color_by_diff=True, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
+def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8),
+         color_by_diff=False, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
     """Plot a tanglegram from two dendrograms.
 
     Parameters
@@ -53,9 +53,17 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
                             Dendrograms to be compared. If DataFrame, will be
                             considered a distance matrix and linkage is
                             generated (see ``link_kwargs``).
-    (labelsA,labelsB) :     list of str
+    (labelsA,labelsB) :     list of str, optional
                             If not provided and a/b are pandas Dataframes,
                             will try to extract from columns.
+    edges :                 list, optional
+                            Edges to plot and untangle. If not provided will
+                            assume that edges are supposed to be drawn between
+                            leafs with the same label. Format must be either:
+                              - `[(l1, l2), ...]`, where l1 and l2 are labels in
+                                `a` and `b`, respectively
+                              - `[(l1, l2, c), ...]`, where `c` is the color of
+                                that edge
     sort :                  bool | "random" | "step1side" | "step2side" | "permutations"
                             If True, will try rearranging dendrogram to
                             optimise pairing of similar values. You can provide
@@ -84,7 +92,7 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
     if isinstance(a, pd.DataFrame):
         module_logger.info('Generating linkage from distances')
         link1 = sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs)
-        if not labelsA:
+        if labelsA is None:
             labelsA = a.columns.tolist()
     elif isinstance(a, np.ndarray):
         link1 = a
@@ -94,12 +102,26 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
     if isinstance(b, pd.DataFrame):
         module_logger.info('Generating linkage from distances')
         link2 = sclust.hierarchy.linkage(sdist.squareform(b, checks=False), **link_kwargs)
-        if not labelsB:
+        if labelsB is None:
             labelsB = b.columns.tolist()
     elif isinstance(b, np.ndarray):
         link2 = b
     else:
         raise TypeError('Parameter `b` needs to be either pandas DataFrame or numpy array')
+
+    if edges is None:
+        edges = [(l, l) for l in labelsA if l in labelsB]
+        edges += [(l, l) for l in labelsB if l in labelsA]
+        edges = list(set(edges))
+    else:
+        for e in edges:
+            if e[0] not in labelsA:
+                raise ValueError(f'Label {e[0]} does not exist in dendrogam A')
+            if e[1] not in labelsB:
+                raise ValueError(f'Label {e[1]} does not exist in dendrogam B')
+
+    if not len(edges):
+        raise ValueError('No matching labels between the two dendrogams')
 
     if sort:
         if not isinstance(sort, str):
@@ -107,6 +129,7 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
         link1, link2 = untangle(link1, link2,
                                 np.asarray(labelsA),
                                 np.asarray(labelsB),
+                                edges=edges,
                                 method=sort, **sort_kwargs)
 
     fig = plt.figure(figsize=figsize)
@@ -118,10 +141,6 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
     # Compute and plot right dendrogram.
     ax2 = fig.add_axes([0.7, 0.1, 0.25, 0.8])  # [0.3, 0.71, 0.6, 0.2])
     Z2 = sclust.hierarchy.dendrogram(link2, labels=labelsB, orientation='right', **dend_kwargs)
-
-    missing = list(set([l for l in Z1['ivl'] if l not in Z2['ivl']] + [l for l in Z2['ivl'] if l not in Z1['ivl']]))
-    if any(missing):
-        module_logger.warning('Labels {0} do not exist in both dendrograms'.format(missing))
 
     # Generate middle plot with connecting lines
     ax3 = fig.add_axes([0.4, 0.1, 0.2, 0.8])
@@ -140,19 +159,18 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
     for _ in [ax3]:  # [ax1,ax2,ax3]:
         _.set_ylim((min_y, max_y))
 
-    # Now iterate over all left leaves
-    for ix_l, l in enumerate(Z1['ivl']):
-        # Skip if no corresponding element
-        if l not in Z2['ivl']:
-            continue
-
-        ix_r = Z2['ivl'].index(l)
+    for i, e in enumerate(edges):
+        ix_l = Z1['ivl'].index(e[0])
+        ix_r = Z2['ivl'].index(e[1])
 
         coords_l = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z1['leaves'])) * (ix_l + .5)
         coords_r = (ax3.viewLim.y1 - ax3.viewLim.y0) / (len(Z2['leaves'])) * (ix_r + .5)
 
         if not color_by_diff:
-            c = 'black'
+            if len(e) == 3:
+                c = e[2]
+            else:
+                c = 'black'
         else:
             v = max(round(.75 - math.fabs(ix_l - ix_r) / len(Z1['ivl']), 2), 0)
             c = (v, v, v)
@@ -164,197 +182,85 @@ def plot(a, b, labelsA=None, labelsB=None, sort=True, figsize=(8, 8),
     return fig
 
 
-def rotate(linkage, i, copy=True):
-    """Rotate linkage at given hinge."""
-    # Make copy
-    if copy:
-        linkage = linkage.copy()
+def entanglement(link1, link2, labels1, labels2, edges, L=1.5, **kwargs):
+    """Calculage average displacement of leafs in dendogram 1 and 2.
 
-    # Rotate
-    linkage[i][0], linkage[i][1] = linkage[i][1], linkage[i][0]
-
-    return linkage
-
-
-def get_all_linkage(linkage, li_MID):
-    """Generate all possible combinations of rotations for a given linkage.
+    Entanglement is a measure between 1 (full entanglement) and 0 (no
+    entanglement).
 
     Parameters
     ----------
-    linkage :       scipy.cluster.hierarchy.linkage
-    li_MID :        int
-                    Index (from the top) of the linkage at which to stop rotating.
+    link1,link2 :       scipy.cluster.hierarchy.linkage
+                        Linkages to untangle.
+    labels1,labels2 :   list
+                        Labels for link1 and link2, respectively.
+    edges :             list of tuples
+                        If provided, test entanglement on these edges only.
+                        Else will measure using labels that exist in both
+                        dendrograms.
+    L :                 any positive number
+                        Distance norm to use for measuring the distance
+                        between the two trees. Can be any positive number,
+                        often one will want to use 0, 1, 1.5 or 2:
+                        ``sum(abs(x-y)^L)``.
+
+    Returns
+    -------
 
     """
-    length = len(linkage)
-    permutations = linkage.reshape(-1, length, 4)
-    i = length - 1
-    while i >= li_MID:
-        for item in permutations:
-            # Make copy
-            new = item.copy()
-            # Rotate
-            new[i][0], new[i][1] = new[i][1], new[i][0]
-            # Append this permutation
-            permutations = np.append(permutations, new)
-            permutations = permutations.reshape(-1, length, 4)
-        i -= 1
-    return permutations
-
-
-class CachedGenerator:
-    """Caches result of generator for re-use."""
-    def __init__(self, generator):
-        self.generator = generator
-        self._cache = []
-
-    def __iter__(self):
-        self.n = 0
-        return self
-
-    def __next__(self):
-        if self.n > (len(self._cache) - 1):
-            self._cache.append(next(self.generator))
-        value = self._cache[self.n]
-        self.n += 1
-        return value
-
-
-def get_all_linkage_gen(linkage, stop, labels, start=0):
-    """Generator for all possible combinations of rotations for a given linkage.
-
-    Parameters
-    ----------
-    linkage :       scipy.cluster.hierarchy.linkage
-    start :         int
-                    Index of the linkage at which to stop rotating. Counts from
-                    top.
-    labels :        list
-                    Labels for given linkage.
-    start :         int
-                    At what hinge to start returning permutations.
-
-    Yields
-    ------
-    new_link :      np.ndarray
-                    A permutation of linkage rotations.
-    lindex :        dict
-                    The mapping of labels to leaf indices.
-
-    """
-    length = len(linkage)
-    linkage = linkage.reshape(-1, length, 4)
-
-    # Invert to/from
-    start = length - 1 - start
-    stop = length - 1 - stop
-
-    i = length - 1
-
-    if i <= start:
-        yield linkage[0], leaf_order(linkage[0], labels, as_dict=True)
-
-    while i > stop:
-        # Use range because linkage will change in size as we edit it
-        for j in range(len(linkage)):
-            # This is the new linkage matrix
-            new = linkage[j].copy()
-            new[i][0], new[i][1] = new[i][1], new[i][0]
-
-            if i <= start:
-                # This is the leaf order
-                lindex = leaf_order(new, labels, as_dict=True)
-
-                yield new, lindex
-
-            linkage = np.append(linkage, new)
-            linkage = linkage.reshape(-1, length, 4)
-        i -= 1
-
-
-def bottom_up(stop, link1, link2, labels1, labels2, L=1.5):
-    """Rotate dendrogram from bottom to "stop" and find smallest entanglement."""
-    # Find leafs and entanglement of start position
+    # Get label indices
     lindex1 = leaf_order(link1, labels1, as_dict=True)
     lindex2 = leaf_order(link2, labels2, as_dict=True)
-    min_entang = entanglement(lindex1, lindex2, L=L)
-    org_entang = float(min_entang)
 
-    # No go over each hinge/knot from bottom to "stop" and rotate it
-    for i in range(stop):
-        # Rotate left and right linkage
-        new1 = rotate(link1, i)
-        new2 = rotate(link2, i)
-
-        # Generate leafs for the new variants
-        lindexn1 = leaf_order(new1, labels1, as_dict=True)
-        lindexn2 = leaf_order(new2, labels2, as_dict=True)
-
-        # Now test pairwise entanglement
-        for j, lx1 in zip([link1, new1],
-                          [lindex1, lindexn1]):
-            for k, lx2 in zip([link2, new2],
-                              [lindex2, lindexn2]):
-                new_entang = entanglement(lx1, lx2, L=L)
-
-                if new_entang < min_entang:
-                    min_entang = new_entang
-                    link1 = j
-                    link2 = k
-                    lindex1 = lx1
-                    lindex2 = lx2
-
-    improved = min_entang < org_entang
-    return link1, link2, min_entang, improved
+    # Get starting entanglement
+    return _entanglement(lindex1, lindex2, L=L)
 
 
-def refine(best_linkage1, best_linkage2, min_entang, labels1, labels2, L=1.5):
-    """Refine rotation to maximize horizontal lines."""
-    org_entang = float(min_entang)
+def _entanglement(lindex1, lindex2, edges=None, L=1.5):
+    """Low-level version of entanglement calculation. For internal use only.
 
-    lindex1 = leaf_order(best_linkage1, labels1, as_dict=True)
-    lindex2 = leaf_order(best_linkage2, labels2, as_dict=True)
+    Parameters
+    ----------
+    lindex1,lindex2 :       dict
+                            Dictionaries mapping the labels of two dendrograms
+                            to their indices.
+    edges :                 list of tuples, optional
+                            If provided, test entanglement on these edges only.
+                            Else will measure using labels that exist in both
+                            dendrograms.
+    L :                     any positive number
+                            Distance norm to use for measuring the distance
+                            between the two trees. Can be any positive number,
+                            often one will want to use 0, 1, 1.5 or 2:
+                            ``sum(abs(x-y)^L)``.
 
-    # For each label
-    for k in list(lindex1):
-        find1 = lindex1[k]
-        find2 = lindex2[k]
-        # If this label is not aligned between left and right dendrogram
-        if find1 != find2:
-            # Find the first hinges for this label
-            knot1 = np.where(best_linkage1 == find1)[0][0]
-            knot2 = np.where(best_linkage2 == find2)[0][0]
+    """
+    assert isinstance(lindex1, dict)
+    assert isinstance(lindex2, dict)
 
-            # Rotate around these hinges
-            new1 = rotate(best_linkage1, knot1)
-            new2 = rotate(best_linkage2, knot2)
-            all1 = np.append([best_linkage1], [new1], axis=0)
-            all2 = np.append([best_linkage2], [new2], axis=0)
+    if edges is None:
+        exist_in_both = list(set(lindex1) & set(lindex2))
 
-            all1_lindices = []
-            for j in all1:
-                all1_lindices.append(leaf_order(j, labels1, as_dict=True))
+        if not exist_in_both:
+            raise ValueError('Not a single matching label in both dendrograms.')
 
-            all2_lindices = []
-            for k in all2:
-                all2_lindices.append(leaf_order(k, labels2, as_dict=True))
+        edges = [(l, l) for l in exist_in_both]
 
-            # Check if any of the new versions are better than the old
-            for j, lix1 in zip(all1, all1_lindices):
-                for k, lix2 in zip(all2, all2_lindices):
-                    new_entang = entanglement(lix1, lix2, L=L)
-                    if new_entang < min_entang:
-                        min_entang = new_entang
-                        best_linkage1 = j
-                        best_linkage2 = k
-                        lindex1 = lix1
-                        lindex2 = lix2
+    # Absolute distance
+    dist = np.array([lindex1[e[0]] - lindex2[e[1]] for e in edges])
+    dist = np.abs(dist)
+    # Absolute entanglement
+    ent = np.sum(dist ** L)
 
-    improved = min_entang < org_entang
-    return best_linkage1, best_linkage2, min_entang, improved
+    # Worst case
+    ix = np.arange(max(len(lindex1), len(lindex2)))
+    worst = np.sum(np.abs(ix - ix[::-1]) ** L)
+
+    # Normalized entanglement
+    return ent / worst
 
 
-def untangle(link1, link2, labels1, labels2, method='random', L=1.5, **kwargs):
+def untangle(link1, link2, labels1, labels2, edges, method='random', L=1.5, **kwargs):
     """Untangle two dendrograms using various methods.
 
     Parameters
@@ -363,6 +269,10 @@ def untangle(link1, link2, labels1, labels2, method='random', L=1.5, **kwargs):
                         Linkages to untangle.
     labels1,labels2 :   list
                         Labels for link1 and link2, respectively.
+    edges :             list of tuples
+                        If provided, test entanglement on these edges only.
+                        Else will measure using labels that exist in both
+                        dendrograms.
     method :            "random" | "step1side" | "step2side" | "permuations"
                         Method to use for untangling. In order of increasing
                         run-time:
@@ -372,26 +282,29 @@ def untangle(link1, link2, labels1, labels2, method='random', L=1.5, **kwargs):
                           - "step2side" turns every hinge in both dendrograms
                           - "permutations" runs permutations of rotations for
                             both dendrograms (has ``O(n^2)^2`` complexity)
+    L :                 any positive number
+                        Distance norm to use for measuring the distance
+                        between the two trees. Can be any positive number,
+                        often one will want to use 0, 1, 1.5 or 2:
+                        ``sum(abs(x-y)^L)``.
     **kwargs
                         Passed to the respective untangling functions.
 
-    See
-
     """
     if method == 'random':
-        return untangle_random_search(link1, link2, labels1, labels2, L=L, **kwargs)
+        return untangle_random_search(link1, link2, labels1, labels2, edges, L=L, **kwargs)
     elif method == 'step1side':
-        return untangle_step_rotate_1side(link1, link2, labels1, labels2, L=L, **kwargs)
+        return untangle_step_rotate_1side(link1, link2, labels1, labels2, edges, L=L, **kwargs)
     elif method == 'step2side':
-        return untangle_step_rotate_2side(link1, link2, labels1, labels2, L=L, **kwargs)
+        return untangle_step_rotate_2side(link1, link2, labels1, labels2, edges, L=L, **kwargs)
     elif method == 'permutations':
-        return untangle_permutations(link1, link2, labels1, labels2, L=L, **kwargs)
+        return untangle_permutations(link1, link2, labels1, labels2, edges, L=L, **kwargs)
     else:
         raise ValueError(f'Unknown method "{method}"')
 
 
-def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
-                          target_ent=0, progress=True):
+def untangle_permutations(link1, link2, labels1, labels2, edges,
+                          L=1.5, n_permute=-1, target_ent=0, progress=True):
     """Untangle by greedily testing all possible permutations of rotations.
 
     This algorithm has O(n^2)^2 complexity and can run very long! In brief:
@@ -409,9 +322,10 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
                         Linkages to (better) align by rotating.
     labels1,labels2 :   list
                         Labels for link1 and link2, respectively.
+    edges :             list of tuples
     L :                 float
                         Distance norm used to calculate the entanglement.
-                        Passed to ``entanglement()``.
+                        Passed to ``_entanglement()``.
     n_permute :         int
                         Number of hinges to permute. Positive values count
                         from the top, negative from the bottom. The default of
@@ -473,7 +387,9 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
                      this_entang,
                      improved1) = bottom_up(ix,
                                             best_linkage1, best_linkage2,
-                                            labels1, labels2, L=L)
+                                            labels1, labels2,
+                                            edges,
+                                            L=L)
 
                     # Fine optimization
                     (best_linkage1,
@@ -481,7 +397,9 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
                      this_entang,
                      improved2) = refine(best_linkage1, best_linkage2,
                                          this_entang,
-                                         labels1, labels2, L=L)
+                                         labels1, labels2,
+                                         edges,
+                                         L=L)
 
                     # Keep this iteration if it's better than the previous
                     if this_entang < min_entang:
@@ -515,7 +433,7 @@ def untangle_permutations(link1, link2, labels1, labels2, L=1.5, n_permute=-1,
     return final_linkage1, final_linkage2
 
 
-def untangle_step_rotate_2side(link1, link2, labels1, labels2,
+def untangle_step_rotate_2side(link1, link2, labels1, labels2, edges,
                                direction='down', L=1.5, max_n_iterations=10):
     """Untangle by stepwise rotating around all hinges in both dendrograms.
 
@@ -535,7 +453,7 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
                         start at the leafs and move up.
     L :                 float
                         Distance norm used to calculate the entanglement.
-                        Passed to ``entanglement()``.
+                        Passed to ``_entanglement()``.
     max_n_iterations :  int
                         Max iterations (default = 10) to run.
 
@@ -551,15 +469,19 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
 
     ol = module_logger.level
     module_logger.setLevel('WARNING')
+
+    edges_inv = [(e[1], e[0]) for e in edges]
     for i in range(int(max_n_iterations)):
         # Rotate the first dendrogram
         link1, link2 = untangle_step_rotate_1side(link1, link2,
                                                   labels1, labels2,
+                                                  edges,
                                                   L=L, direction=direction)
 
         # Now rotate the second dendrogram
         link2, link1 = untangle_step_rotate_1side(link2, link1,
                                                   labels2, labels1,
+                                                  edges_inv,
                                                   L=L, direction=direction)
 
         # Get the new entanglement
@@ -567,7 +489,7 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
         lindex2 = leaf_order(link2, labels2, as_dict=True)
 
         # Get new entanglement
-        new_entang = entanglement(lindex1, lindex2, L=L)
+        new_entang = _entanglement(lindex1, lindex2, edges, L=L)
 
         # Stop if there is no improvement from the last iteration
         if new_entang == min_entang:
@@ -583,7 +505,7 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2,
     return link1, link2
 
 
-def untangle_step_rotate_1side(link1, link2, labels1, labels2,
+def untangle_step_rotate_1side(link1, link2, labels1, labels2, edges,
                                direction='down', L=1.5):
     """Untangle by stepwise rotating around all hinges in one dendrogram.
 
@@ -598,7 +520,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2,
                         start at the leafs and move up.
     L :                 float
                         Distance norm used to calculate the entanglement.
-                        Passed to ``entanglement()``.
+                        Passed to ``_entanglement()``.
 
     Returns
     -------
@@ -613,7 +535,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2,
     lindex2 = leaf_order(link2, labels2, as_dict=True)
 
     # Get starting entanglement
-    min_entang = entanglement(lindex1, lindex2, L=L)
+    min_entang = _entanglement(lindex1, lindex2, edges, L=L)
 
     n_hinges = len(link1) - 1
     for i in range(n_hinges):
@@ -627,7 +549,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2,
         r_lindex1 = leaf_order(r_link1, labels1, as_dict=True)
 
         # Get new entanglement
-        new_entang = entanglement(r_lindex1, lindex2, L=L)
+        new_entang = _entanglement(r_lindex1, lindex2, edges, L=L)
 
         # Check if new entanglment is better
         if new_entang < min_entang:
@@ -641,7 +563,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2,
     return link1, link2
 
 
-def untangle_random_search(link1, link2, labels1, labels2, R=100, L=1.5):
+def untangle_random_search(link1, link2, labels1, labels2, edges, R=100, L=1.5):
     """Untangle dendrogram using a simple random search.
 
     Shuffle trees and see if entanglement got better.
@@ -652,11 +574,12 @@ def untangle_random_search(link1, link2, labels1, labels2, R=100, L=1.5):
                         Linkages to (better) align by shuffling.
     labels1,labels2 :   list
                         Labels for link1 and link2, respectively.
+    edges :             list of tuples
     R :                 int
                         Number of shuffles to perform.
     L :                 float
                         Distance norm used to calculate the entanglement.
-                        Passed to ``entanglement()``.
+                        Passed to ``_entanglement()``.
 
     Returns
     -------
@@ -669,7 +592,7 @@ def untangle_random_search(link1, link2, labels1, labels2, R=100, L=1.5):
     lindex2 = leaf_order(link2, labels2, as_dict=True)
 
     # Get starting entanglement
-    min_entang = entanglement(lindex1, lindex2, L=L)
+    min_entang = _entanglement(lindex1, lindex2, edges, L=L)
 
     for i in range(int(R)):
         # Shuffle dendrograms
@@ -681,7 +604,7 @@ def untangle_random_search(link1, link2, labels1, labels2, R=100, L=1.5):
         s_lindex2 = leaf_order(s_link2, labels2, as_dict=True)
 
         # Get new entanglement
-        new_entang = entanglement(s_lindex1, s_lindex2, L=L)
+        new_entang = _entanglement(s_lindex1, s_lindex2, edges, L=L)
 
         # Check if new entanglment is better
         if new_entang < min_entang:
@@ -772,41 +695,192 @@ def leaf_order(link, labels=None, as_dict=True, invert=False):
             return leafs_ix
 
 
-def entanglement(lindex1, lindex2, L=1.5):
-    """Calculage average displacement of leafs in dendogram 1 and 2.
+def rotate(linkage, i, copy=True):
+    """Rotate linkage at given hinge."""
+    # Make copy
+    if copy:
+        linkage = linkage.copy()
 
-    Entanglement is a measure between 1 (full entanglement) and 0 (no
-    entanglement). Ignores leafs that aren't present in both dendrograms.
+    # Rotate
+    linkage[i][0], linkage[i][1] = linkage[i][1], linkage[i][0]
+
+    return linkage
+
+
+def get_all_linkage(linkage, li_MID):
+    """Generate all possible combinations of rotations for a given linkage.
 
     Parameters
     ----------
-    lindex1,lindex2 :       dict
-                            Dictionaries mapping the labels of two dendrograms
-                            to their indices.
-    L :                     any positive number
-                            Distance norm to use for measuring the distance
-                            between the two trees. Can be any positive number,
-                            often one will want to use 0, 1, 1.5 or 2:
-                            ``sum(abs(x-y)^L)``.
+    linkage :       scipy.cluster.hierarchy.linkage
+    li_MID :        int
+                    Index (from the top) of the linkage at which to stop rotating.
 
     """
-    assert isinstance(lindex1, dict)
-    assert isinstance(lindex2, dict)
+    length = len(linkage)
+    permutations = linkage.reshape(-1, length, 4)
+    i = length - 1
+    while i >= li_MID:
+        for item in permutations:
+            # Make copy
+            new = item.copy()
+            # Rotate
+            new[i][0], new[i][1] = new[i][1], new[i][0]
+            # Append this permutation
+            permutations = np.append(permutations, new)
+            permutations = permutations.reshape(-1, length, 4)
+        i -= 1
+    return permutations
 
-    exist_in_both = list(set(lindex1) & set(lindex2))
 
-    if not exist_in_both:
-        raise ValueError('Not a single matching label in both dendrograms.')
+class CachedGenerator:
+    """Caches result of generator for re-use."""
 
-    # Absolute distance
-    dist = np.array([lindex1[l] - lindex2[l] for l in exist_in_both])
-    dist = np.abs(dist)
-    # Absolute entanglement
-    ent = np.sum(dist ** L)
+    def __init__(self, generator):
+        self.generator = generator
+        self._cache = []
 
-    # Worst case
-    ix = np.arange(max(len(lindex1), len(lindex2)))
-    worst = np.sum(np.abs(ix - ix[::-1]) ** L)
+    def __iter__(self):
+        self.n = 0
+        return self
 
-    # Normalized entanglement
-    return ent / worst
+    def __next__(self):
+        if self.n > (len(self._cache) - 1):
+            self._cache.append(next(self.generator))
+        value = self._cache[self.n]
+        self.n += 1
+        return value
+
+
+def get_all_linkage_gen(linkage, stop, labels, start=0):
+    """Generator for all possible combinations of rotations for a given linkage.
+
+    Parameters
+    ----------
+    linkage :       scipy.cluster.hierarchy.linkage
+    start :         int
+                    Index of the linkage at which to stop rotating. Counts from
+                    top.
+    labels :        list
+                    Labels for given linkage.
+    start :         int
+                    At what hinge to start returning permutations.
+
+    Yields
+    ------
+    new_link :      np.ndarray
+                    A permutation of linkage rotations.
+    lindex :        dict
+                    The mapping of labels to leaf indices.
+
+    """
+    length = len(linkage)
+    linkage = linkage.reshape(-1, length, 4)
+
+    # Invert to/from
+    start = length - 1 - start
+    stop = length - 1 - stop
+
+    i = length - 1
+
+    if i <= start:
+        yield linkage[0], leaf_order(linkage[0], labels, as_dict=True)
+
+    while i > stop:
+        # Use range because linkage will change in size as we edit it
+        for j in range(len(linkage)):
+            # This is the new linkage matrix
+            new = linkage[j].copy()
+            new[i][0], new[i][1] = new[i][1], new[i][0]
+
+            if i <= start:
+                # This is the leaf order
+                lindex = leaf_order(new, labels, as_dict=True)
+
+                yield new, lindex
+
+            linkage = np.append(linkage, new)
+            linkage = linkage.reshape(-1, length, 4)
+        i -= 1
+
+
+def bottom_up(stop, link1, link2, labels1, labels2, edges, L=1.5):
+    """Rotate dendrogram from bottom to "stop" and find smallest entanglement."""
+    # Find leafs and entanglement of start position
+    lindex1 = leaf_order(link1, labels1, as_dict=True)
+    lindex2 = leaf_order(link2, labels2, as_dict=True)
+    min_entang = _entanglement(lindex1, lindex2, edges, L=L)
+    org_entang = float(min_entang)
+
+    # No go over each hinge/knot from bottom to "stop" and rotate it
+    for i in range(stop):
+        # Rotate left and right linkage
+        new1 = rotate(link1, i)
+        new2 = rotate(link2, i)
+
+        # Generate leafs for the new variants
+        lindexn1 = leaf_order(new1, labels1, as_dict=True)
+        lindexn2 = leaf_order(new2, labels2, as_dict=True)
+
+        # Now test pairwise entanglement
+        for j, lx1 in zip([link1, new1],
+                          [lindex1, lindexn1]):
+            for k, lx2 in zip([link2, new2],
+                              [lindex2, lindexn2]):
+                new_entang = _entanglement(lx1, lx2, edges, L=L)
+
+                if new_entang < min_entang:
+                    min_entang = new_entang
+                    link1 = j
+                    link2 = k
+                    lindex1 = lx1
+                    lindex2 = lx2
+
+    improved = min_entang < org_entang
+    return link1, link2, min_entang, improved
+
+
+def refine(best_linkage1, best_linkage2, min_entang, labels1, labels2, edges, L=1.5):
+    """Refine rotation to maximize horizontal lines."""
+    org_entang = float(min_entang)
+
+    lindex1 = leaf_order(best_linkage1, labels1, as_dict=True)
+    lindex2 = leaf_order(best_linkage2, labels2, as_dict=True)
+
+    # For each edge
+    for e in edges:
+        find1 = lindex1[e[0]]
+        find2 = lindex2[e[1]]
+        # If this label is not aligned between left and right dendrogram
+        if find1 != find2:
+            # Find the first hinges for this label
+            knot1 = np.where(best_linkage1 == find1)[0][0]
+            knot2 = np.where(best_linkage2 == find2)[0][0]
+
+            # Rotate around these hinges
+            new1 = rotate(best_linkage1, knot1)
+            new2 = rotate(best_linkage2, knot2)
+            all1 = np.append([best_linkage1], [new1], axis=0)
+            all2 = np.append([best_linkage2], [new2], axis=0)
+
+            all1_lindices = []
+            for j in all1:
+                all1_lindices.append(leaf_order(j, labels1, as_dict=True))
+
+            all2_lindices = []
+            for k in all2:
+                all2_lindices.append(leaf_order(k, labels2, as_dict=True))
+
+            # Check if any of the new versions are better than the old
+            for j, lix1 in zip(all1, all1_lindices):
+                for k, lix2 in zip(all2, all2_lindices):
+                    new_entang = _entanglement(lix1, lix2, edges, L=L)
+                    if new_entang < min_entang:
+                        min_entang = new_entang
+                        best_linkage1 = j
+                        best_linkage2 = k
+                        lindex1 = lix1
+                        lindex2 = lix2
+
+    improved = min_entang < org_entang
+    return best_linkage1, best_linkage2, min_entang, improved
