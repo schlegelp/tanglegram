@@ -109,6 +109,12 @@ def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8)
     else:
         raise TypeError('Parameter `b` needs to be either pandas DataFrame or numpy array')
 
+    if len(labelsA) != len(set(labelsA)):
+        module_logger.warning('Some labels in A appear to not be unique')
+
+    if len(labelsB) != len(set(labelsB)):
+        module_logger.warning('Some labels in B appear to not be unique')
+
     if edges is None:
         edges = [(l, l) for l in labelsA if l in labelsB]
         edges += [(l, l) for l in labelsB if l in labelsA]
