@@ -65,11 +65,11 @@ def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8)
                               - `[(l1, l2, c), ...]`, where `c` is the color of
                                 that edge
     sort :                  bool | "random" | "step1side" | "step2side" | "permutations"
-                            If True, will try rearranging dendrogram to
-                            optimise pairing of similar values. You can provide
+                            If True, will try rearranging the dendrograms to
+                            minimize crossing of edges. You can provide
                             the exact method to use as a string. ``True``
-                            defaults to "random". See ``untangle()`` for a
-                            full description.
+                            defaults to "random". See ``untangle()`` for a full
+                            description.
     figsize :               tuple
                             Size of the figure.
     link_kwargs :           dict, optional
