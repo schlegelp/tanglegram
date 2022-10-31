@@ -669,7 +669,7 @@ def untangle_step_rotate_2side(link1, link2, labels1, labels2, edges,
             break
 
     module_logger.setLevel(ol)
-    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.3f}')
     return link1, link2
 
 
@@ -727,7 +727,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2, edges,
         if min_entang == 0:
             break
 
-    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.3f}')
     return link1, link2
 
 
@@ -792,7 +792,7 @@ def untangle_random_search(link1, link2, labels1, labels2,
         if min_entang == 0:
             break
 
-    module_logger.info(f'Finished optimising at entanglement {min_entang:.2f}')
+    module_logger.info(f'Finished optimising at entanglement {min_entang:.3f}')
     return link1, link2
 
 
