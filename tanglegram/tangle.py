@@ -11,23 +11,25 @@
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along
 
+import math
+import logging
 
 import matplotlib.pyplot as plt
 import scipy.cluster as sclust
 import scipy.spatial.distance as sdist
+import networkx as nx
 import numpy as np
 import pandas as pd
-import math
-import logging
 
+from matplotlib.patches import ConnectionPatch
 from tqdm import tqdm
+from itertools import combinations
+
+from .utils import linkage_to_graph
 
 
-__all__ = ['plot', 'entanglement', 'untangle']
+__all__ = ['plot', 'plot_many', 'entanglement', 'untangle', 'cluster_dendrogram']
 
 # Set up logging
 module_logger = logging.getLogger(__name__)
@@ -184,6 +186,166 @@ def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8)
         ax3.plot([0, 1], [coords_l, coords_r], '-', linewidth=1, c=c)
 
     module_logger.info('Done. Use matplotlib.pyplot.show() to show plot.')
+
+    return fig
+
+
+
+def plot_many(x, labels=None, edges=None, sort=True, figsize=(8, 8),
+              link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
+    """Plot a tanglegram from two or more dendrograms.
+
+    Parameters
+    ----------
+    x :                     iterable of pandas.DataFrame | scipy.cluster.hierarchy.linkage
+                            Dendrograms to be compared. DataFrames, will be
+                            considered a distance matrix and a linkage is
+                            generated (see ``link_kwargs``).
+    labels :                list of lists, optional
+                            If not provided and ``x`` are pandas Dataframes,
+                            will try to extract from columns.
+    edges :                 list of list, optional
+                            Edges to plot and untangle. Format must be
+                            ``[edges_ab, edges_bc, .. ]`` where `edges_ab`,
+                            `edges_bc`, etc. are the edges between the first and
+                            second, the second the third dendrogram and so forth.
+                            Each ``edges_`` must have follow these formats:
+                              - `[(l1, l2), ...]`, where l1 and l2 are labels in
+                                the first and the second dendrogram, respectively
+                              - `[(l1, l2, c), ...]`, where `c` is the color of
+                                that edge
+                            If not provided will assume that edges are supposed
+                            to be drawn between leafs with the same label.
+    sort :                  bool
+                            If True, will try rearranging the dendrograms to
+                            minimize crossing of edges. Uses `step2side` for the
+                            first two dendrograms and subsequently `step1side`.
+    figsize :               tuple
+                            Size of the figure.
+    link_kwargs :           dict, optional
+                            Keyword arguments to be passed to
+                            ``scipy.cluster.hierarchy.linkage``.
+    dend_kwargs :           dict, optional
+                            Keyword arguments to be passed to
+                            ``scipy.cluster.hierarchy.dendrogram``.
+    sort_kwargs :           dict, optional
+                            Keyword arguments to be passed to
+                            ``tanglegram.untangle``.
+
+    Returns
+    -------
+    matplotlib figure
+
+    """
+    plt.style.use('ggplot')
+
+    if not isinstance(x, (list, tuple)):
+        raise TypeError(f'Expected list or tuple for `x`, got "{type(x)}"')
+    elif len(x) < 2:
+            raise ValueError(f'Expected >= 2 dendrograms in `x`, got {len(x)}')
+
+    if labels is not None:
+        if len(labels) != len(x):
+            raise ValueError('Length of labels does not match length of `x`')
+        labels = list(labels)
+    else:
+        labels = [None] * len(x)
+
+    linkages = []
+    for i, a in enumerate(x):
+        if isinstance(a, pd.DataFrame):
+            module_logger.info('Generating linkage from distances')
+            linkages.append(sclust.hierarchy.linkage(sdist.squareform(a, checks=False), **link_kwargs))
+            if labels[i] is None:
+                labels[i] = a.columns.tolist()
+        elif isinstance(a, np.ndarray):
+            linkages.append(a)
+        else:
+            raise TypeError('Parameter `x` needs to be either pandas DataFrames or linkages (numpy arrays)')
+
+    if edges is None:
+        edges = [[(l, l) for l in lA if l in lB] for lB, lA in zip(labels[:-1], labels[1:])]
+    elif isinstance(edges, (list, tuple)):
+        edges = list(edges)
+
+        if len(edges) != (len(x) - 1):
+            raise ValueError(f'Expected {len(x) - 1} sets of edges for {len(x)} '
+                             f'dendrograms, got {len(edges)}')
+
+        for i, edges_ in enumerate(edges):
+            for e in edges_:
+                if e[0] not in labels[i]:
+                    raise ValueError(f'Label {e[0]} does not exist in dendrogam {i + 1}')
+                if e[1] not in labels[i + 1]:
+                    raise ValueError(f'Label {e[1]} does not exist in dendrogam {i + 2}')
+    else:
+        raise TypeError('Expected `edges` to be either None or list of lists, '
+                        f'got "{type(edges)}"')
+
+    if not len(edges):
+        raise ValueError('No matching labels between the two dendrogams')
+
+    if sort:
+        for i, (l1, l2) in enumerate(zip(linkages[:-1], linkages[1:])):
+            if sort == 'random':
+                sort_kwargs['rotate'] = 'link2' if i == 0 else 'link1'
+                method = 'random'
+            else:
+                sort_kwargs.pop('rotate', None)
+                method = 'step2side' if i == 0 else 'step1side'
+
+            if i == 0:
+                l1, l2 = untangle(l1, l2,
+                                  np.asarray(labels[i]),
+                                  np.asarray(labels[i + 1]),
+                                  edges=edges[i],
+                                  method=method,
+                                  **sort_kwargs)
+            else:
+                l2, _ = untangle(l2, l1,
+                                 np.asarray(labels[i + 1]),
+                                 np.asarray(labels[i]),
+                                 edges=[(e[1], e[0]) for e in edges[i]],  # need to reverse edges here
+                                 method=method,
+                                 **sort_kwargs)
+            linkages[i] = l1
+            linkages[i + 1] = l2
+
+    fig, axes = plt.subplots(ncols=1, nrows=len(x), figsize=figsize)
+
+    ix_maps = []
+    for i, Z in enumerate(linkages):
+        # Generate a mapping from label -> index in dendrogram
+        m = dict(zip(np.asarray(labels[i])[sclust.hierarchy.leaves_list(Z)],
+                     np.arange(len(labels[i]))))
+        ix_maps.append(m)
+
+        DEFAULTS = dict(above_threshold_color='slategrey')
+        DEFAULTS.update(dend_kwargs)
+        _ = sclust.hierarchy.dendrogram(Z,
+                                        labels=labels[i],
+                                        ax=axes[i],
+                                        **DEFAULTS)
+
+    for i, edges_ in enumerate(edges):
+        ax1 = axes[i]
+        ax2 = axes[i + 1]
+        for e in edges_:
+            ix1 = ix_maps[i][e[0]]
+            ix2 = ix_maps[i + 1][e[1]]
+
+            x1 = (ix1 + .5) * 10
+            x2 = (ix2 + .5) * 10
+
+            if len(e) == 3:
+                c = e[2]
+            else:
+                c = (0, 0, 0, 0.5)
+
+            con = ConnectionPatch(xyA=(x1, 0), coordsA='data', axesA=ax1,
+                                  xyB=(x2, 0), coordsB='data', axesB=ax2,
+                                  color=c, lw=1, ls='--')
+            fig.add_artist(con)
 
     return fig
 
