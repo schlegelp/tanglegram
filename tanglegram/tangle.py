@@ -569,7 +569,8 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2, edges,
     return link1, link2
 
 
-def untangle_random_search(link1, link2, labels1, labels2, edges, R=100, L=1.5):
+def untangle_random_search(link1, link2, labels1, labels2,
+                           edges, rotate='both', R=100, L=1.5):
     """Untangle dendrogram using a simple random search.
 
     Shuffle trees and see if entanglement got better.
@@ -581,6 +582,7 @@ def untangle_random_search(link1, link2, labels1, labels2, edges, R=100, L=1.5):
     labels1,labels2 :   list
                         Labels for link1 and link2, respectively.
     edges :             list of tuples
+    rotate :            "both" | "link1" | link2
     R :                 int
                         Number of shuffles to perform.
     L :                 float
@@ -593,6 +595,8 @@ def untangle_random_search(link1, link2, labels1, labels2, edges, R=100, L=1.5):
                         Reordered linkages.
 
     """
+    assert rotate in ('both', 'link1', 'link2')
+
     # Get label indices
     lindex1 = leaf_order(link1, labels1, as_dict=True)
     lindex2 = leaf_order(link2, labels2, as_dict=True)
@@ -602,12 +606,17 @@ def untangle_random_search(link1, link2, labels1, labels2, edges, R=100, L=1.5):
 
     for i in range(int(R)):
         # Shuffle dendrograms
-        s_link1 = shuffle_dendogram(link1)
-        s_link2 = shuffle_dendogram(link2)
+        if rotate in ('both', 'link1'):
+            s_link1 = shuffle_dendogram(link1)
+            s_lindex1 = leaf_order(s_link1, labels1, as_dict=True)
+        else:
+            s_link1, s_lindex1 = link1, lindex1
 
-        # Get label indices
-        s_lindex1 = leaf_order(s_link1, labels1, as_dict=True)
-        s_lindex2 = leaf_order(s_link2, labels2, as_dict=True)
+        if rotate in ('both', 'link2'):
+            s_link2 = shuffle_dendogram(link2)
+            s_lindex2 = leaf_order(s_link2, labels2, as_dict=True)
+        else:
+            s_link2, s_lindex2 = link2, lindex2
 
         # Get new entanglement
         new_entang = _entanglement(s_lindex1, s_lindex2, edges, L=L)
