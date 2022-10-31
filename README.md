@@ -23,6 +23,7 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 - [Numpy](http://www.scipy.org)
 - [Matplotlib](http://www.matplotlib.org)
 - [tqdm](https://github.com/tqdm/tqdm)
+- [networkx](https://networkx.org/)
 
 ## How it works
 

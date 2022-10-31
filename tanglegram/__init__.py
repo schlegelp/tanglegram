@@ -17,4 +17,5 @@
 
 __version__ = "0.2.0"
 
-from tanglegram.tangle import *
+from .tangle import *
+from . import utils
