@@ -89,7 +89,7 @@ def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8)
     matplotlib figure
 
     """
-    plt.style.use('ggplot')
+    #plt.style.use('ggplot')
 
     if isinstance(a, pd.DataFrame):
         module_logger.info('Generating linkage from distances')
