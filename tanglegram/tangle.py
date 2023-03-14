@@ -28,8 +28,7 @@ from itertools import combinations
 
 from .utils import linkage_to_graph
 
-
-__all__ = ['plot', 'plot_many', 'entanglement', 'untangle', 'cluster_dendrogram']
+__all__ = ['tanglegram', 'tanglegram_many', 'entanglement', 'untangle']
 
 # Set up logging
 module_logger = logging.getLogger(__name__)
@@ -45,8 +44,8 @@ if not module_logger.handlers:
     module_logger.addHandler(sh)
 
 
-def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8),
-         color_by_diff=False, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
+def tanglegram(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8),
+               color_by_diff=False, link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
     """Plot a tanglegram from two dendrograms.
 
     Parameters
@@ -191,8 +190,8 @@ def plot(a, b, labelsA=None, labelsB=None, edges=None, sort=True, figsize=(8, 8)
 
 
 
-def plot_many(x, labels=None, edges=None, sort=True, figsize=(8, 8),
-              link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
+def tanglegram_many(x, labels=None, edges=None, sort=True, figsize=(8, 8),
+                    link_kwargs={}, dend_kwargs={}, sort_kwargs={}):
     """Plot a tanglegram from two or more dendrograms.
 
     Parameters
@@ -680,7 +679,7 @@ def untangle_step_rotate_1side(link1, link2, labels1, labels2, edges,
     Parameters
     ----------
     link1,link2 :       scipy.cluster.hierarchy.linkage
-                        Linkages to (better) align by rotating.
+                        Linkages to better align by rotating the first dendrogram.
     labels1,labels2 :   list
                         Labels for link1 and link2, respectively.
     direction :         "down" | "up"
