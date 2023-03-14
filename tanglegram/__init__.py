@@ -15,7 +15,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .tangle import *
+from .dend import *
 from . import utils

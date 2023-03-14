@@ -26,7 +26,6 @@ from matplotlib.patches import ConnectionPatch
 from tqdm import tqdm
 from itertools import combinations
 
-from .utils import linkage_to_graph
 
 __all__ = ['tanglegram', 'tanglegram_many', 'entanglement', 'untangle']
 
@@ -1060,75 +1059,3 @@ def refine(best_linkage1, best_linkage2, min_entang, labels1, labels2, edges, L=
 
     improved = min_entang < org_entang
     return best_linkage1, best_linkage2, min_entang, improved
-
-
-def cluster_dendrogram(Z, clusters, **kwargs):
-    """Thin wrapper around scipy's dendrogram function.
-
-    This function adds the option to color explicitly by clusters instead of the
-    simple `above_threshold_color` in scipy's dendrogram function.
-
-    Parameters
-    ----------
-    Z :         np.ndarray
-                Linkage.
-    clusters :  np.ndarray
-                Cluster assignment for each leaf.
-    **kwargs
-                Keyword arguments are passed through to scipy's `dendrogram`.
-
-
-    Returns
-    -------
-    dict
-
-    """
-    G = linkage_to_graph(Z).to_undirected()
-    leaf_ids = np.arange(0, sclust.hierarchy.num_obs_linkage(Z))
-
-    clusters = np.asarray(clusters).flatten()
-    if len(clusters) != len(leaf_ids):
-        raise ValueError(f'Got {len(clusters)} clusters for {len(leaf_ids)} leafs.')
-
-    # Prepare colors
-    colors = {}
-
-    # Go over each cluster and find the subgraph that contains it
-    singletons = []
-    for i, cl in enumerate(np.unique(clusters)):
-        this_ids = leaf_ids[clusters == cl]
-        if len(this_ids) > 1:
-            subgraph = []
-            for comb in combinations(this_ids, 2):
-                subgraph += nx.shortest_path(G, comb[0], comb[1])
-            subgraph = list(set(subgraph))
-        else:
-            subgraph = this_ids
-            singletons.append(this_ids[0])
-
-        # Track colors
-        c = sclust.hierarchy._link_line_colors[i % len(sclust.hierarchy._link_line_colors)]
-        colors.update({n: c for n in subgraph})
-
-    above_threshold_color = kwargs.get('above_threshold_color', 'lightgrey')
-    DEFAULTS = dict(link_color_func=lambda x: colors.get(x, above_threshold_color))
-    DEFAULTS.update(kwargs)
-    DEFAULTS['get_leaves'] = True  # we need this for later
-
-    dn = sclust.hierarchy.dendrogram(Z, **DEFAULTS)
-
-    # Unfortunately, the link_color_function ignores clusters that consists of a single
-    # leaf -> we'll try changing the color after the fact
-    ax = kwargs.get('ax', plt.gca())
-
-    leaves_pos = dict(zip(dn['leaves'],
-                          np.arange(len(dn['leaves']))))
-    for s in singletons:
-        # Find which element corresponds to this singleton
-        el = [e for i, e in enumerate(Z) if e[0] == s or e[1] == s][0]
-        height = el[2]
-        x = (leaves_pos[s] + .5) * 10
-
-        ax.plot([x, x], [0, height], color=colors[s])
-
-    return dn
