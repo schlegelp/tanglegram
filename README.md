@@ -29,7 +29,7 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 
 `tanglegram` exposes three functions:
 
-1. `tanglegram.plot` plots a tanglegram (untangling optionally)
+1. `tanglegram.tanglegram` plots a tanglegram (untangling optionally)
 2. `tanglegram.entanglement` measures the entanglement between two linkages
 3. `tanglegram.untangle` rotates dendrograms to minimize entanglement
 
@@ -55,7 +55,7 @@ mat2 = pd.DataFrame(data,
                     index=labelsB)
 
 # Plot tanglegram
-fig = tg.plot(mat1, mat2, sort=False)
+fig = tg.tanglegram(mat1, mat2, sort=False)
 plt.show()
 ```
 
@@ -63,7 +63,7 @@ plt.show()
 
 ```Python
 # Plot again but this time try minimizing cross-over
-fig = tg.plot(mat1, mat2, sort=True)
+fig = tg.tanglegram(mat1, mat2, sort=True)
 plt.show()
 ```
 
@@ -72,7 +72,7 @@ plt.show()
 ```Python
 # Alternatively, you can also explicitly provide the edges to plot and untangle  
 # Note how in this case the labels don't have to match anymore
-fig = tg.plot(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
+fig = tg.tanglegram(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
 plt.show()
 ```
 
