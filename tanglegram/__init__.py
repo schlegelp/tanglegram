@@ -20,4 +20,5 @@ __version__ = "0.4.0"
 from .tangle import *
 from .dend import *
 from .similarity import *
+from .flow import *
 from . import utils
