@@ -86,14 +86,8 @@ plt.show()
 
 <img src="docs/images/tangle_sorted.png" width="650">
 
-```Python
-# Alternatively, you can also explicitly provide the edges to plot and untangle
-# Note how in this case the labels don't have to match anymore
-fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
-plt.show()
-```
 
-<img src="docs/images/tangle_edges.png" width="650">
+**See more elaborate examples below!**
 
 ### Dendrograms
 
