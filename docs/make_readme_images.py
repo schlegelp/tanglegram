@@ -214,6 +214,41 @@ fig, dns = tg.tanglegram_many(
 save(fig, "tangle_many.png", tight=False)
 
 
+# ------------------------------------------------------------ 8c. circular
+fig, dns = tg.tanglegram_many(
+    [view(0, 0), view(0.5, 1), view(1.0, 2)],
+    sort=True,
+    clusters=[few_names] * 3,
+    layout="circular",
+    color_edges_by="source",
+    names=["baseline", "noise 0.5", "noise 1.0"],
+    figsize=(7.5, 7.5),
+)
+save(fig, "tangle_circular.png", tight=False)
+
+
+# ------------------------------------------------------------ 8d. cluster flow
+# Five well separated groups, clustered again at rising noise levels
+flow_rng = np.random.default_rng(7)
+truth_centers = np.array([[0, 0], [4, 0], [2, 4], [6, 4], [8, 0]], dtype=float)
+flow_X = np.repeat(truth_centers, 60, axis=0) + flow_rng.normal(0, 0.8, (300, 2))
+truth = np.repeat([f"g{i + 1}" for i in range(5)], 60)
+
+
+def cluster_at(noise, seed):
+    jittered = flow_X + np.random.default_rng(seed).normal(0, noise, flow_X.shape)
+    return sch.fcluster(sch.linkage(jittered, "ward"), 5, criterion="maxclust")
+
+
+flows, ax = tg.cluster_flow(
+    [truth, cluster_at(0.8, 1), cluster_at(1.6, 2), cluster_at(2.4, 3)],
+    names=["true groups", "noise 0.8", "noise 1.6", "noise 2.4"],
+    share_colors=False,
+    figsize=(9, 5),
+)
+save(ax.figure, "cluster_flow.png")
+
+
 # ---------------------------------------------------------------- 9. plotly
 try:
     dn, fig = tg.dendrogram(

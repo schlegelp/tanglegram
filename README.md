@@ -7,7 +7,9 @@ by Tal Galili.
 ## Features
 - dendrograms with additional features compared to scipy: cluster colouring,
   leaf annotation tracks, collapsed clades, radial layouts
-- tanglegrams of two or more dendrograms, with shared cluster colours
+- tanglegrams of two or more dendrograms, stacked or circular, with shared
+  cluster colours
+- alluvial view of how cluster membership changes between clusterings
 - measures of how similar two trees are, independent of how they are drawn
 - `matplotlib` or `plotly` as plotting backend
 
@@ -45,7 +47,8 @@ Installing via [PIP](https://pip.pypa.io/en/stable/installing/) should install a
 6. `tanglegram.untangle` rotates dendrograms to minimize entanglement or crossings
 7. `tanglegram.alignment_quality` judges an alignment against what the trees allow
 8. `tanglegram.cophenetic_correlation` and `tanglegram.baker_gamma` measure how similar two trees are
-9. `tanglegram.cluster_color_map` builds one colour mapping shared across plots
+9. `tanglegram.cluster_flow` shows how cluster membership moves between clusterings
+10. `tanglegram.cluster_color_map` builds one colour mapping shared across plots
 
 ```Python
 import tanglegram as tg
@@ -407,6 +410,91 @@ It returns the figure plus one dendrogram per input, in the same order, so
 Every tree here has its leafs along the bottom, so a connector has to cross the
 panel below it - keep the number of leafs modest or the lines become hard to
 follow.
+
+#### Circular layout
+
+The stacked layout has a limit that no amount of tweaking fixes: a tree has one
+leaf row, at one end, so a middle tree can never sit next to *both* its
+neighbours and some connector always has to cross a tree.
+
+`layout="circular"` sidesteps it. Point the trees outwards from a shared inner
+ring and every leaf row lands on the same circle, so a connector is just a
+chord across the middle and crosses nothing at all:
+
+```Python
+fig, dns = tg.tanglegram_many(
+    [view(0, 0), view(0.5, 1), view(1.0, 2)],
+    sort=True,
+    clusters=[few_names] * 3,
+    layout="circular",
+    color_edges_by="source",
+    names=["baseline", "noise 0.5", "noise 1.0"],
+    figsize=(7.5, 7.5),
+)
+```
+
+<img src="docs/images/tangle_circular.png" width="600">
+
+`color_edges_by` colours each chord by the cluster it leaves ("source") or
+arrives at ("target"), which is what makes the middle readable - without it you
+get a grey thicket. `inner_radius` trades room for the trees against room for
+the chords, and `bow` sets how far the chords dip towards the centre.
+
+The layout also works for exactly two trees, and unlike the stacked version it
+has no preferred pair: any two sectors are equally close.
+
+### Following clusters between clusterings
+
+Past a few hundred leafs, one line per leaf is hopeless whatever the layout.
+But usually the question is not "where did *this* leaf go" - it is "did this
+cluster survive", which is a question about groups. `cluster_flow` answers that
+with ribbons whose width is the number of observations moving between clusters:
+
+```Python
+flow_rng = np.random.default_rng(7)
+truth_centers = np.array([[0, 0], [4, 0], [2, 4], [6, 4], [8, 0]], dtype=float)
+flow_X = np.repeat(truth_centers, 60, axis=0) + flow_rng.normal(0, 0.8, (300, 2))
+truth = np.repeat([f"g{i + 1}" for i in range(5)], 60)
+
+def cluster_at(noise, seed):
+    jittered = flow_X + np.random.default_rng(seed).normal(0, noise, flow_X.shape)
+    return sch.fcluster(sch.linkage(jittered, "ward"), 5, criterion="maxclust")
+
+flows, ax = tg.cluster_flow(
+    [truth, cluster_at(0.8, 1), cluster_at(1.6, 2), cluster_at(2.4, 3)],
+    names=["true groups", "noise 0.8", "noise 1.6", "noise 2.4"],
+    share_colors=False,
+    figsize=(9, 5),
+)
+```
+
+<img src="docs/images/cluster_flow.png" width="700">
+
+Five well separated groups, re-clustered at rising noise. The first transition
+is almost straight across; by the last one the groups have shredded. That is
+300 observations - a tanglegram of the same data would be a solid block of
+lines.
+
+It returns the counts as well as the axis, so the picture and the numbers agree:
+
+```Python
+[f for f in flows if f["step"] == 0][:3]
+```
+
+A few things worth knowing:
+
+- Blocks are ordered to sit near where their members came from, which keeps the
+  ribbons from crossing more than they have to. `sort=False` falls back to
+  order of first appearance.
+- Ribbons take the colour of the cluster they leave; `color_by="target"` flips
+  that.
+- `share_colors=False` is used above because `fcluster` numbers each cut on its
+  own, so "cluster 1" at one noise level has nothing to do with "cluster 1" at
+  the next. Leave it on when your labels genuinely mean the same thing in every
+  column, and a cluster keeps one colour throughout.
+- Observations with a `None`/NaN assignment are dropped from that column's
+  blocks and from any ribbon touching them, so a block that loses members to
+  missing data visibly fails to fill.
 
 ### Interactive tanglegrams
 
