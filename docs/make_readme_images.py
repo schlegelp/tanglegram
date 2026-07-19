@@ -205,7 +205,7 @@ def view(noise, seed):
     )
 
 
-fig = tg.tanglegram_many(
+fig, dns = tg.tanglegram_many(
     [view(0, 0), view(0.5, 1), view(1.0, 2)],
     sort=True,
     clusters=[few_names] * 3,

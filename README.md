@@ -386,7 +386,7 @@ def view(noise, seed):
     return pd.DataFrame(ssd.squareform(ssd.pdist(jittered)),
                         index=few_labels, columns=few_labels)
 
-fig = tg.tanglegram_many(
+fig, dns = tg.tanglegram_many(
     [view(0, 0), view(0.5, 1), view(1.0, 2)],
     sort=True,
     clusters=[few_names] * 3,
@@ -401,9 +401,12 @@ agree less and less as you go down. Sorting is done pairwise from the top: the
 first pair is untangled two-sided, and every pair after that has its upper
 dendrogram already pinned, so only the lower one can still rotate.
 
-Note that `tanglegram_many` returns just the figure, not the dendrograms. Every
-tree here has its leafs along the bottom, so a connector has to cross the panel
-below it - keep the number of leafs modest or the lines become hard to follow.
+It returns the figure plus one dendrogram per input, in the same order, so
+`dns[1]["ivl"]` gives you the leaf order of the middle tree.
+
+Every tree here has its leafs along the bottom, so a connector has to cross the
+panel below it - keep the number of leafs modest or the lines become hard to
+follow.
 
 ### Interactive tanglegrams
 

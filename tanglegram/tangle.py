@@ -50,9 +50,6 @@ if not module_logger.handlers:
     sh.setFormatter(formatter)
     module_logger.addHandler(sh)
 
-# TODOs:
-#
-
 
 def tanglegram(
     a,
@@ -104,7 +101,7 @@ def tanglegram(
                             ``scipy.cluster.hierarchy.linkage``.
     dend_kwargs :           dict, optional
                             Keyword arguments to be passed to
-                            ``scipy.cluster.hierarchy.dendrogram``.
+                            ``tanglegram.dendrogram``.
     sort_kwargs :           dict, optional
                             Keyword arguments to be passed to
                             ``tanglegram.untangle``.
@@ -591,7 +588,13 @@ def tanglegram_many(
 
     Returns
     -------
-    matplotlib figure
+    fig :                   matplotlib.Figure
+                            The figure. Use its .get_axes() method to get the
+                            individual axes.
+    dns :                   list of scipy Dendrogram
+                            One dendrogram per entry in ``x``, in the same
+                            order. Mirrors what ``tanglegram()`` returns for
+                            its two dendrograms.
 
     """
     if not isinstance(x, (list, tuple)):
@@ -710,6 +713,7 @@ def tanglegram_many(
     fig, axes = plt.subplots(ncols=1, nrows=len(x), figsize=figsize)
 
     ix_maps = []
+    dns = []
     for i, Z in enumerate(linkages):
         # Generate a mapping from label -> index in dendrogram
         m = dict(
@@ -722,7 +726,7 @@ def tanglegram_many(
 
         DEFAULTS = dict(above_threshold_color="slategrey")
         DEFAULTS.update(dend_kwargs)
-        _ = dendrogram(
+        dn, _ = dendrogram(
             Z,
             labels=labels[i],
             ax=axes[i],
@@ -730,6 +734,7 @@ def tanglegram_many(
             cluster_colors=cluster_colors,
             **DEFAULTS,
         )
+        dns.append(dn)
 
     for i, edges_ in enumerate(edges):
         ax1 = axes[i]
@@ -759,7 +764,7 @@ def tanglegram_many(
             )
             fig.add_artist(con)
 
-    return fig
+    return fig, dns
 
 
 def entanglement(link1, link2, labels1, labels2, edges=None, L=1.5, **kwargs):

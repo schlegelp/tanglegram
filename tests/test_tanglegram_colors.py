@@ -15,6 +15,8 @@ import pandas as pd
 import pytest
 
 from matplotlib.collections import LineCollection
+import scipy.cluster.hierarchy as sch
+
 from scipy.spatial.distance import pdist, squareform
 
 import tanglegram as tg
@@ -316,7 +318,7 @@ def many_matrices(k=3, n=15):
 
 def test_many_shares_one_palette():
     mats, clusters = many_matrices()
-    fig = tg.tanglegram_many(mats, sort=False, clusters=[clusters] * 3)
+    fig, dns = tg.tanglegram_many(mats, sort=False, clusters=[clusters] * 3)
 
     panels = [link_colors(ax) for ax in fig.get_axes()]
     assert panels[0] == panels[1] == panels[2]
@@ -339,4 +341,32 @@ def test_many_cluster_count_must_match():
     mats, clusters = many_matrices()
     with pytest.raises(ValueError, match="cluster assignments"):
         tg.tanglegram_many(mats, sort=False, clusters=[clusters] * 2)
+    plt.close("all")
+
+
+def test_many_returns_one_dendrogram_per_input():
+    """Mirrors what tanglegram() returns for its two dendrograms."""
+    mats, clusters = many_matrices(k=3)
+    fig, dns = tg.tanglegram_many(mats, sort=False, clusters=[clusters] * 3)
+
+    assert len(dns) == 3
+    for dn in dns:
+        assert set(dn) >= {"icoord", "dcoord", "ivl", "leaves", "color_list"}
+        assert sorted(dn["ivl"]) == sorted(mats[0].columns)
+    plt.close("all")
+
+
+def test_many_dendrograms_are_in_input_order():
+    """dns[i] must describe x[i], not whatever order they were drawn in."""
+    mats, _ = many_matrices(k=3)
+    fig, dns = tg.tanglegram_many(mats, sort=False)
+
+    for mat, dn in zip(mats, dns):
+        # Leaf order has to match the tree that matrix produces on its own
+        own = sch.dendrogram(
+            sch.linkage(squareform(mat.values, checks=False)),
+            labels=list(mat.columns),
+            no_plot=True,
+        )["ivl"]
+        assert dn["ivl"] == own
     plt.close("all")
