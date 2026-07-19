@@ -69,28 +69,28 @@ mat2 = pd.DataFrame(data,
                     index=labelsB)
 
 # Plot tanglegram
-fig = tg.tanglegram(mat1, mat2, sort=False)
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=False)
 plt.show()
 ```
 
-<img src="https://user-images.githubusercontent.com/7161148/105351954-2ae19f80-5be5-11eb-9dad-2dd0fe83d44d.png" width="650">
+<img src="docs/images/tangle_unsorted.png" width="650">
 
 ```Python
 # Plot again but this time try minimizing cross-over
-fig = tg.tanglegram(mat1, mat2, sort=True)
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=True)
 plt.show()
 ```
 
-<img src="https://user-images.githubusercontent.com/7161148/105351772-e8b85e00-5be4-11eb-9343-db42f143ec68.png" width="650">
+<img src="docs/images/tangle_sorted.png" width="650">
 
 ```Python
 # Alternatively, you can also explicitly provide the edges to plot and untangle
 # Note how in this case the labels don't have to match anymore
-fig = tg.tanglegram(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=True, edges=[('A', 'A'), ('C', 'D')])
 plt.show()
 ```
 
-<img src="https://user-images.githubusercontent.com/7161148/196478917-e9488312-65b0-4e0c-8c8e-d000879dacde.png" width="650">
+<img src="docs/images/tangle_edges.png" width="650">
 
 ### Dendrograms
 

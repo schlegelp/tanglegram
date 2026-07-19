@@ -41,6 +41,30 @@ def save(fig, name, tight=True):
     print(f"wrote {IMAGES / name}")
 
 
+# ------------------------------------------------------- 0. intro tanglegrams
+# The three examples at the top of the README.
+labelsA = ["A", "B", "C", "D"]
+labelsB = ["B", "A", "C", "D"]
+data = [
+    [0, 0.1, 0.4, 0.3],
+    [0.1, 0, 0.5, 0.6],
+    [0.4, 0.5, 0, 0.2],
+    [0.3, 0.6, 0.2, 0],
+]
+
+mat1 = pd.DataFrame(data, columns=labelsA, index=labelsA)
+mat2 = pd.DataFrame(data, columns=labelsB, index=labelsB)
+
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=False)
+save(fig, "tangle_unsorted.png", tight=False)
+
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=True)
+save(fig, "tangle_sorted.png", tight=False)
+
+fig, dn1, dn2 = tg.tanglegram(mat1, mat2, sort=True, edges=[("A", "A"), ("C", "D")])
+save(fig, "tangle_edges.png", tight=False)
+
+
 # --------------------------------------------------------------- shared data
 # Four groups of six samples, with enough overlap that the tree does not
 # recover the groups perfectly - which is what makes `clusters` interesting.

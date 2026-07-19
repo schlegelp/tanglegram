@@ -24,22 +24,40 @@ def python_blocks(heading, until):
     return re.findall(r"```Python\n(.*?)```", section, re.S)
 
 
+def run_blocks(blocks, label):
+    """Run snippets in order against one namespace, as a reader would."""
+    namespace = {}
+    for i, block in enumerate(blocks, 1):
+        # Opening a browser is not helpful in a test
+        code = block.replace("plt.show()", "pass").replace("fig.show()", "pass")
+        try:
+            exec(compile(code, f"<README {label} block {i}>", "exec"), namespace)
+        except Exception as exc:
+            raise AssertionError(
+                f"README {label} example {i} failed: {exc}\n\n{block}"
+            ) from exc
+    return namespace
+
+
+def test_intro_examples_run():
+    """The three tanglegrams at the top of the README."""
+    blocks = python_blocks("## How it works", "### Dendrograms")
+    assert len(blocks) == 3, "expected the three intro tanglegrams"
+
+    namespace = run_blocks(blocks, "intro")
+
+    # `tanglegram()` returns three things; the snippets have to unpack them,
+    # or `fig` silently ends up being a tuple.
+    assert not isinstance(namespace["fig"], tuple)
+
+
 def test_examples_run():
     pytest.importorskip("plotly")
 
     blocks = python_blocks("### Dendrograms", "### Untangling methods")
     assert len(blocks) >= 12, "expected the worked examples to still be there"
 
-    namespace = {}
-    for i, block in enumerate(blocks, 1):
-        # Opening a browser is not helpful in a test
-        code = block.replace("fig.show()", "pass")
-        try:
-            exec(compile(code, f"<README block {i}>", "exec"), namespace)
-        except Exception as exc:
-            raise AssertionError(
-                f"README example {i} failed: {exc}\n\n{block}"
-            ) from exc
+    run_blocks(blocks, "dendrogram")
 
 
 def test_readme_images_exist():
