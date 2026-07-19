@@ -24,8 +24,10 @@ import scipy.spatial.distance as sdist
 import numpy as np
 import pandas as pd
 
-from matplotlib.patches import ConnectionPatch
+from matplotlib.collections import LineCollection
+from matplotlib.patches import ConnectionPatch, Polygon
 
+from . import dend
 from .dend import dendrogram, cluster_color_map, _to_plotly_color
 
 
@@ -329,6 +331,243 @@ def tanglegram(
     return fig, dn1, dn2
 
 
+#: Points used to draw an arc or a connector; straight lines would cut chords.
+_CURVE_RESOLUTION = 32
+
+#: Radial room set aside for leaf labels in the circular layout, as a fraction
+#: of the outer radius.
+_LABEL_BAND = 0.07
+
+
+def _tanglegram_circular(
+    linkages,
+    labels,
+    edges,
+    names,
+    figsize,
+    dend_kwargs,
+    edge_kwargs,
+    clusters,
+    cluster_colors,
+    edge_colors,
+    inner_radius,
+    bow,
+):
+    """Arrange the dendrograms as sectors of a circle.
+
+    A stacked layout can never put every tree's leafs next to both of its
+    neighbours: a tree has one leaf row, at one end, so some connector always
+    has to cross a tree. Bending the whole thing into a circle removes the
+    problem - every tree points outwards from a shared inner ring, so all the
+    leaf rows lie on one circle and a connector is a chord across the middle
+    that touches no tree at all.
+    """
+    n_trees = len(linkages)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    if not 0 < inner_radius < 1:
+        raise ValueError(f"`inner_radius` must be between 0 and 1, got {inner_radius}")
+
+    # Leave a wedge of blank angle between sectors so neighbouring trees do not
+    # run into each other
+    sector = 2 * np.pi / n_trees
+    pad = sector * 0.06
+
+    dns, leaf_angles = [], []
+    for i, Z in enumerate(linkages):
+        DEFAULTS = dict(above_threshold_color="slategrey")
+        DEFAULTS.update(dend_kwargs)
+        no_labels = DEFAULTS.pop("no_labels", False)
+
+        dn, segments, _, wedges = dend._geometry(
+            Z,
+            labels=labels[i],
+            clusters=None if clusters is None else clusters[i],
+            cluster_colors=cluster_colors,
+            **DEFAULTS,
+        )
+        dns.append(dn)
+
+        start = i * sector + pad
+        stop = (i + 1) * sector - pad
+        width = dend._independent_width(dn)
+        height = max((d[1] for d in dn["dcoord"]), default=1.0) or 1.0
+
+        # Hold the trees off the ring so the labels get a band to themselves,
+        # clear of the chords below
+        leaf_radius = inner_radius + (0 if no_labels else _LABEL_BAND)
+
+        def angle(pos, start=start, stop=stop, width=width):
+            return start + np.asarray(pos, dtype=float) / width * (stop - start)
+
+        def radius(dist, height=height, leaf_radius=leaf_radius):
+            # Leafs on the inner ring, root out at the rim
+            return leaf_radius + np.asarray(dist, dtype=float) / height * (
+                1 - leaf_radius
+            )
+
+        _draw_circular_tree(ax, segments, wedges, angle, radius)
+
+        positions = dend._unit_positions(dn)
+        leaf_angles.append(dict(zip(dn["ivl"], angle(positions))))
+
+        if not no_labels:
+            _label_circular_leafs(ax, dn["ivl"], angle(positions), inner_radius)
+
+        if names is not None:
+            mid = (start + stop) / 2
+            ax.text(
+                1.16 * np.cos(mid),
+                1.16 * np.sin(mid),
+                str(names[i]),
+                ha="center",
+                va="center",
+                fontweight="bold",
+            )
+
+    _draw_circular_edges(
+        ax, edges, leaf_angles, inner_radius, bow, edge_kwargs, edge_colors
+    )
+
+    ax.set_xlim(-1.3, 1.3)
+    ax.set_ylim(-1.3, 1.3)
+
+    return fig, dns
+
+
+def _draw_circular_tree(ax, segments, wedges, angle, radius):
+    """Place one dendrogram's segments into its sector."""
+    grouped = {}
+    for seg in segments:
+        i0, i1 = seg["i"]
+        d0, d1 = seg["d"]
+        if d0 == d1 and i0 != i1:
+            # A link's horizontal bar spans two angles, so it curves
+            thetas = angle(np.linspace(i0, i1, _CURVE_RESOLUTION))
+            r = radius(d0)
+            points = list(zip(r * np.cos(thetas), r * np.sin(thetas)))
+        else:
+            thetas, radii = angle([i0, i1]), radius([d0, d1])
+            points = list(zip(radii * np.cos(thetas), radii * np.sin(thetas)))
+        grouped.setdefault((seg["color"], seg["ls"]), []).append(points)
+
+    for (color, ls), lines in grouped.items():
+        ax.add_collection(LineCollection(lines, colors=color, linestyles=ls))
+
+    for wedge in wedges:
+        thetas = angle(
+            np.linspace(
+                wedge["i"] - wedge["width"] / 2,
+                wedge["i"] + wedge["width"] / 2,
+                _CURVE_RESOLUTION,
+            )
+        )
+        apex_t, apex_r = angle(wedge["i"]), radius(wedge["height"])
+        base_r = radius(0.0)
+        points = [(apex_r * np.cos(apex_t), apex_r * np.sin(apex_t))]
+        points += list(zip(base_r * np.cos(thetas), base_r * np.sin(thetas)))
+        ax.add_patch(
+            Polygon(
+                points,
+                closed=True,
+                facecolor=wedge["color"],
+                edgecolor=wedge["color"],
+                alpha=0.65,
+                zorder=2,
+            )
+        )
+
+
+def _label_circular_leafs(ax, ivl, thetas, inner_radius):
+    """Leaf labels in the band between the chords and the trees."""
+    size = 8 if len(ivl) <= 30 else 6
+    r = inner_radius + 0.01
+    for label, theta in zip(ivl, thetas):
+        degrees = np.degrees(theta) % 360
+        flip = 90 < degrees < 270
+        ax.text(
+            r * np.cos(theta),
+            r * np.sin(theta),
+            str(label),
+            rotation=degrees + 180 if flip else degrees,
+            rotation_mode="anchor",
+            ha="right" if flip else "left",
+            va="center",
+            fontsize=size,
+        )
+
+
+def _draw_circular_edges(
+    ax, edges, leaf_angles, inner_radius, bow, edge_kwargs, edge_colors
+):
+    """Connect the leaf rings with chords that dip towards the centre."""
+    color = edge_kwargs.get("color", edge_kwargs.get("c", (0, 0, 0, 0.4)))
+    width = edge_kwargs.get("linewidth", edge_kwargs.get("lw", 0.8))
+
+    for i, edges_ in enumerate(edges):
+        for j, e in enumerate(edges_):
+            start = leaf_angles[i].get(e[0])
+            stop = leaf_angles[i + 1].get(e[1])
+            if start is None or stop is None:
+                continue
+
+            p0 = np.array([np.cos(start), np.sin(start)]) * inner_radius
+            p1 = np.array([np.cos(stop), np.sin(stop)]) * inner_radius
+            # Pulling the control point towards the origin bends the chord
+            # inwards, which keeps it clear of the leaf labels
+            control = bow * (p0 + p1) / 2
+
+            t = np.linspace(0, 1, _CURVE_RESOLUTION).reshape(-1, 1)
+            curve = (1 - t) ** 2 * p0 + 2 * t * (1 - t) * control + t**2 * p1
+
+            if len(e) == 3:
+                this = e[2]
+            elif edge_colors is not None and edge_colors[i][j] is not None:
+                this = edge_colors[i][j]
+            else:
+                this = color
+
+            ax.plot(curve[:, 0], curve[:, 1], color=this, lw=width, zorder=1)
+
+
+def _many_edge_colors(edges, color_edges_by, labels, clusters, cluster_colors):
+    """Colour for every connecting edge, taken from the cluster of one end.
+
+    Returns None if the edges should not be coloured, otherwise a list per edge
+    set with one colour per edge (None where that leaf has no cluster).
+    """
+    if color_edges_by is None:
+        return None
+
+    if color_edges_by not in ("source", "target"):
+        raise ValueError(
+            '`color_edges_by` must be "source" or "target", got ' f'"{color_edges_by}"'
+        )
+
+    if clusters is None:
+        module_logger.warning(
+            "`color_edges_by` needs `clusters` - edges keep their default colour"
+        )
+        return None
+
+    offset = 0 if color_edges_by == "source" else 1
+    end = 0 if color_edges_by == "source" else 1
+
+    colored = []
+    for i in range(len(edges)):
+        lookup = {}
+        for label, cl in zip(labels[i + offset], np.asarray(clusters[i + offset])):
+            key = cl.item() if isinstance(cl, np.generic) else cl
+            if key in cluster_colors:
+                lookup[label] = cluster_colors[key]
+        colored.append([lookup.get(e[end]) for e in edges[i]])
+
+    return colored
+
+
 def _pick_edge_color(
     i, e, ix_l, ix_r, n_left, color_by_diff, edge_by_cluster, default_color
 ):
@@ -531,8 +770,14 @@ def tanglegram_many(
     link_kwargs={},
     dend_kwargs={},
     sort_kwargs={},
+    edge_kwargs={},
     clusters=None,
     cluster_colors=None,
+    names=None,
+    color_edges_by=None,
+    layout="rows",
+    inner_radius=0.45,
+    bow=0.25,
 ):
     """Plot a tanglegram from two or more dendrograms.
 
@@ -576,6 +821,9 @@ def tanglegram_many(
     sort_kwargs :           dict, optional
                             Keyword arguments to be passed to
                             ``tanglegram.untangle``.
+    edge_kwargs :           dict, optional
+                            Style for the connecting edges, e.g.
+                            ``dict(color="red", lw=2)``.
     clusters :              list of list-like, optional
                             One cluster assignment per dendrogram. All of them
                             share a single set of colors, so a cluster that
@@ -585,6 +833,31 @@ def tanglegram_many(
                             Colors for those clusters. Either a
                             ``{cluster: color}`` mapping or a sequence cycled in
                             order of first appearance.
+    names :                 list of str, optional
+                            A name for each dendrogram. Shown as the panel
+                            title ("rows") or beside the sector ("circular").
+    color_edges_by :        "source" | "target", optional
+                            Colour each connecting edge by the cluster of the
+                            leaf it starts from ("source", the earlier
+                            dendrogram) or ends at ("target"). Needs
+                            ``clusters``.
+    layout :                "rows" | "circular"
+                            How to arrange the dendrograms. "rows" stacks them
+                            vertically and connects consecutive pairs. Because
+                            every tree then has its leafs along the bottom, a
+                            connector has to cross the panel below it.
+                            "circular" instead points the trees outwards from a
+                            shared inner ring, so every leaf row lies on one
+                            circle and the connectors are chords that cross no
+                            tree at all.
+    inner_radius :          float
+                            "circular" only: radius of the leaf ring, as a
+                            fraction of the outer radius. Smaller values leave
+                            more room for the trees and less for the chords.
+    bow :                   float
+                            "circular" only: how far the chords bend towards
+                            the centre. 0 sends them straight through it, 1
+                            leaves them straight.
 
     Returns
     -------
@@ -710,6 +983,32 @@ def tanglegram_many(
         # One palette across all of them, so a cluster keeps its color
         cluster_colors = cluster_color_map(*clusters, colors=cluster_colors)
 
+    if names is not None and len(names) != len(x):
+        raise ValueError(f"Got {len(names)} names for {len(x)} dendrograms.")
+
+    edge_colors = _many_edge_colors(
+        edges, color_edges_by, labels, clusters, cluster_colors
+    )
+
+    if layout not in ("rows", "circular"):
+        raise ValueError(f'Unknown layout: "{layout}". Expected "rows" or "circular".')
+
+    if layout == "circular":
+        return _tanglegram_circular(
+            linkages,
+            labels=labels,
+            edges=edges,
+            names=names,
+            figsize=figsize,
+            dend_kwargs=dend_kwargs,
+            edge_kwargs=edge_kwargs,
+            clusters=clusters,
+            cluster_colors=cluster_colors,
+            edge_colors=edge_colors,
+            inner_radius=inner_radius,
+            bow=bow,
+        )
+
     fig, axes = plt.subplots(ncols=1, nrows=len(x), figsize=figsize)
 
     ix_maps = []
@@ -739,7 +1038,7 @@ def tanglegram_many(
     for i, edges_ in enumerate(edges):
         ax1 = axes[i]
         ax2 = axes[i + 1]
-        for e in edges_:
+        for j, e in enumerate(edges_):
             ix1 = ix_maps[i][e[0]]
             ix2 = ix_maps[i + 1][e[1]]
 
@@ -748,8 +1047,10 @@ def tanglegram_many(
 
             if len(e) == 3:
                 c = e[2]
+            elif edge_colors is not None and edge_colors[i][j] is not None:
+                c = edge_colors[i][j]
             else:
-                c = (0, 0, 0, 0.5)
+                c = edge_kwargs.get("color", edge_kwargs.get("c", (0, 0, 0, 0.5)))
 
             con = ConnectionPatch(
                 xyA=(x1, 0),
@@ -759,8 +1060,10 @@ def tanglegram_many(
                 coordsB="data",
                 axesB=ax2,
                 color=c,
-                lw=1,
-                ls="--",
+                lw=edge_kwargs.get("linewidth", edge_kwargs.get("lw", 1)),
+                ls=edge_kwargs.get("linestyle", edge_kwargs.get("ls", "--")),
+                # Keep the connectors behind the trees they have to cross
+                zorder=0,
             )
             fig.add_artist(con)
 

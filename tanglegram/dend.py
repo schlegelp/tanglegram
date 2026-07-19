@@ -234,76 +234,18 @@ def dendrogram(
 
     Z = np.asarray(Z)
     n_obs = len(Z) + 1
-    above_threshold_color = _normalize_color(above_threshold_color)
 
-    # Work out the color for every node in the linkage
-    if clusters is not None:
-        if kwargs.get("truncate_mode", None):
-            raise ValueError(
-                "`clusters` cannot be combined with scipy's `truncate_mode`: "
-                "truncation collapses leafs, so cluster assignments no longer "
-                "map onto what is drawn."
-            )
-        node_cluster = _assign_node_clusters(Z, clusters)
-        color_map = _build_color_map(node_cluster[:n_obs], cluster_colors)
-
-        def node_color(k):
-            cl = node_cluster[k]
-            if cl is _MIXED or cl is None:
-                return above_threshold_color
-            return color_map[cl]
-
-    else:
-        kwargs.setdefault("above_threshold_color", above_threshold_color)
-        node_cluster = None
-        node_color = None
-
-    # scipy calls `link_color_func` exactly once per link and in the same order
-    # as it fills icoord/dcoord, so recording the calls tells us which linkage
-    # node each drawn link belongs to. That mapping is what lets us color the
-    # two halves of a link independently, and tell legs apart from leafs.
-    node_ids = []
-
-    def _record(k):
-        node_ids.append(k)
-        return above_threshold_color if node_color is None else node_color(k)
-
-    if node_color is None:
-        # Let scipy color the links itself (i.e. honor `color_threshold`), then
-        # take a second, throwaway pass purely to recover the node ids.
-        dn = sch.dendrogram(Z, no_plot=True, **kwargs)
-        link_colors = list(dn["color_list"])
-        sch.dendrogram(Z, no_plot=True, link_color_func=_record, **kwargs)
-    else:
-        dn = sch.dendrogram(Z, no_plot=True, link_color_func=_record, **kwargs)
-        link_colors = [node_color(k) for k in node_ids]
-
-    if collapse is not None:
-        dn, node_ids, link_colors, wedges = _collapse_layout(
-            dn,
-            Z,
-            collapse=collapse,
-            node_cluster=node_cluster,
-            node_color=node_color,
-            # Without clusters the colors are scipy's own, so keep them by node
-            # rather than falling back to grey for everything we redraw
-            original_colors=dict(zip(node_ids, link_colors)),
-            collapse_width=collapse_width,
-            collapse_label=collapse_label,
-            above_threshold_color=above_threshold_color,
-        )
-    else:
-        wedges = []
-
-    segments, leaf_base = _build_segments(
-        dn,
+    dn, segments, leaf_base, wedges = _geometry(
         Z,
-        node_ids,
-        link_colors,
-        node_color=node_color,
-        hanging=_hang_amount(dn, hanging),
+        clusters=clusters,
+        cluster_colors=cluster_colors,
         above_threshold_color=above_threshold_color,
         above_threshold_ls=above_threshold_ls,
+        hanging=hanging,
+        collapse=collapse,
+        collapse_width=collapse_width,
+        collapse_label=collapse_label,
+        **kwargs,
     )
 
     leaf_colors = _resolve_leaf_colors(dn, leaf_base, leaf_color, n_obs)
@@ -410,6 +352,114 @@ def _assign_node_clusters(Z, clusters):
         node_cluster[n + i] = merged
 
     return node_cluster
+
+
+def _geometry(
+    Z,
+    clusters=None,
+    cluster_colors=None,
+    above_threshold_color="lightgrey",
+    above_threshold_ls="-",
+    hanging=False,
+    collapse=None,
+    collapse_width=1.0,
+    collapse_label=None,
+    **kwargs,
+):
+    """Work out everything needed to draw a dendrogram, without drawing it.
+
+    Split out from `dendrogram` so that other layouts - the circular
+    tanglegram, for one - can place the same geometry somewhere else entirely.
+
+    Returns
+    -------
+    dn :        dict
+                The dendrogram as scipy would return it, with the leaf order
+                and, when collapsing, the wedge summary.
+    segments :  list of dict
+                Individually styled line segments, in independent/dependent
+                coordinates. See `_build_segments`.
+    leaf_base : dict
+                Leaf position -> (baseline distance, color).
+    wedges :    list of dict
+                Collapsed clades to draw, empty unless `collapse` was given.
+
+    """
+    Z = np.asarray(Z)
+    n_obs = len(Z) + 1
+    above_threshold_color = _normalize_color(above_threshold_color)
+
+    # Work out the color for every node in the linkage
+    if clusters is not None:
+        if kwargs.get("truncate_mode", None):
+            raise ValueError(
+                "`clusters` cannot be combined with scipy's `truncate_mode`: "
+                "truncation collapses leafs, so cluster assignments no longer "
+                "map onto what is drawn."
+            )
+        node_cluster = _assign_node_clusters(Z, clusters)
+        color_map = _build_color_map(node_cluster[:n_obs], cluster_colors)
+
+        def node_color(k):
+            cl = node_cluster[k]
+            if cl is _MIXED or cl is None:
+                return above_threshold_color
+            return color_map[cl]
+
+    else:
+        kwargs.setdefault("above_threshold_color", above_threshold_color)
+        node_cluster = None
+        node_color = None
+
+    # scipy calls `link_color_func` exactly once per link and in the same order
+    # as it fills icoord/dcoord, so recording the calls tells us which linkage
+    # node each drawn link belongs to. That mapping is what lets us color the
+    # two halves of a link independently, and tell legs apart from leafs.
+    node_ids = []
+
+    def _record(k):
+        node_ids.append(k)
+        return above_threshold_color if node_color is None else node_color(k)
+
+    if node_color is None:
+        # Let scipy color the links itself (i.e. honor `color_threshold`), then
+        # take a second, throwaway pass purely to recover the node ids.
+        dn = sch.dendrogram(Z, no_plot=True, **kwargs)
+        link_colors = list(dn["color_list"])
+        sch.dendrogram(Z, no_plot=True, link_color_func=_record, **kwargs)
+    else:
+        dn = sch.dendrogram(Z, no_plot=True, link_color_func=_record, **kwargs)
+        link_colors = [node_color(k) for k in node_ids]
+
+    if collapse is not None:
+        dn, node_ids, link_colors, wedges = _collapse_layout(
+            dn,
+            Z,
+            collapse=collapse,
+            node_cluster=node_cluster,
+            node_color=node_color,
+            # Without clusters the colors are scipy's own, so keep them by node
+            # rather than falling back to grey for everything we redraw
+            original_colors=dict(zip(node_ids, link_colors)),
+            collapse_width=collapse_width,
+            collapse_label=collapse_label,
+            above_threshold_color=above_threshold_color,
+        )
+    else:
+        wedges = []
+
+    segments, leaf_base = _build_segments(
+        dn,
+        Z,
+        node_ids,
+        link_colors,
+        node_color=node_color,
+        hanging=_hang_amount(dn, hanging),
+        above_threshold_color=above_threshold_color,
+        above_threshold_ls=above_threshold_ls,
+    )
+
+    return dn, segments, leaf_base, wedges
 
 
 def cluster_color_map(*assignments, colors=None):
