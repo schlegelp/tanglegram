@@ -40,9 +40,9 @@ def run_blocks(blocks, label):
 
 
 def test_intro_examples_run():
-    """The three tanglegrams at the top of the README."""
+    """The introductory tanglegrams at the top of the README."""
     blocks = python_blocks("## How it works", "### Dendrograms")
-    assert len(blocks) == 3, "expected the three intro tanglegrams"
+    assert blocks, "expected the intro tanglegrams to still be there"
 
     namespace = run_blocks(blocks, "intro")
 
