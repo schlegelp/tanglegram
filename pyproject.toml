@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tanglegram"
+description = "Plot simple tanglegrams from two dendrograms"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Philipp Schlegel", email = "pms70@cam.ac.uk" }]
+keywords = ["python", "tanglegram", "dendrogram"]
+requires-python = ">=3.9"
+dynamic = ["version"]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "scipy>=0.18.1",
+    "numpy>=1.12.1",
+    "pandas",
+    "matplotlib>=2.0.0",
+    "networkx",
+]
+
+[project.optional-dependencies]
+plotly = ["plotly", "seaborn"]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/schlegelp/tanglegram"
+Source = "https://github.com/schlegelp/tanglegram"
+Issues = "https://github.com/schlegelp/tanglegram/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "tanglegram.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["tanglegram*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
