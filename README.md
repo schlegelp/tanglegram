@@ -368,6 +368,43 @@ shared mapping on its own:
 colors = tg.cluster_color_map(group_names, group_names)
 ```
 
+### More than two dendrograms
+
+`tanglegram_many` stacks any number of dendrograms as rows and connects each
+one to the next. It takes `clusters` as a list with one assignment per
+dendrogram, and - like `tanglegram` - draws them all from a single palette, so
+a cluster keeps its colour the whole way down:
+
+```Python
+# Half the samples, so the connecting lines stay readable across three panels
+few = X[::2]
+few_names = group_names[::2]
+few_labels = [f"s{i}" for i in range(len(few))]
+
+def view(noise, seed):
+    jittered = few + np.random.default_rng(seed).normal(0, noise, few.shape)
+    return pd.DataFrame(ssd.squareform(ssd.pdist(jittered)),
+                        index=few_labels, columns=few_labels)
+
+fig = tg.tanglegram_many(
+    [view(0, 0), view(0.5, 1), view(1.0, 2)],
+    sort=True,
+    clusters=[few_names] * 3,
+    figsize=(8, 8),
+)
+```
+
+<img src="docs/images/tangle_many.png" width="600">
+
+Three views of the same twelve samples with increasing noise, so the trees
+agree less and less as you go down. Sorting is done pairwise from the top: the
+first pair is untangled two-sided, and every pair after that has its upper
+dendrogram already pinned, so only the lower one can still rotate.
+
+Note that `tanglegram_many` returns just the figure, not the dendrograms. Every
+tree here has its leafs along the bottom, so a connector has to cross the panel
+below it - keep the number of leafs modest or the lines become hard to follow.
+
 ### Interactive tanglegrams
 
 Both `dendrogram` and `tanglegram` take `backend="plotly"`:

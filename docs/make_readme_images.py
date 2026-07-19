@@ -172,16 +172,16 @@ save(fig, "dend_collapse.png")
 
 # ----------------------------------------------------- 8. tanglegram colours
 labels = [f"s{i}" for i in range(24)]
-dist = pd.DataFrame(ssd.squareform(ssd.pdist(X)), index=labels, columns=labels)
-dist2 = pd.DataFrame(
+dist_a = pd.DataFrame(ssd.squareform(ssd.pdist(X)), index=labels, columns=labels)
+dist_b = pd.DataFrame(
     ssd.squareform(ssd.pdist(X + rng.normal(0, 0.6, X.shape))),
     index=labels,
     columns=labels,
 )
 
 fig, dn1, dn2 = tg.tanglegram(
-    dist,
-    dist2,
+    dist_a,
+    dist_b,
     sort=True,
     figsize=(9, 6),
     clusters_left=group_names,
@@ -189,6 +189,29 @@ fig, dn1, dn2 = tg.tanglegram(
     color_edges_by="left",
 )
 save(fig, "tangle_clusters.png")
+
+
+# ------------------------------------------------ 8b. more than two dendrograms
+# Half the samples, so the connecting lines stay readable across three panels
+few = X[::2]
+few_names = group_names[::2]
+few_labels = [f"s{i}" for i in range(len(few))]
+
+
+def view(noise, seed):
+    jittered = few + np.random.default_rng(seed).normal(0, noise, few.shape)
+    return pd.DataFrame(
+        ssd.squareform(ssd.pdist(jittered)), index=few_labels, columns=few_labels
+    )
+
+
+fig = tg.tanglegram_many(
+    [view(0, 0), view(0.5, 1), view(1.0, 2)],
+    sort=True,
+    clusters=[few_names] * 3,
+    figsize=(8, 8),
+)
+save(fig, "tangle_many.png", tight=False)
 
 
 # ---------------------------------------------------------------- 9. plotly
